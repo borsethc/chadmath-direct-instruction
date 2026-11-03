@@ -20,6 +20,7 @@ import {
 import { DILesson, MathFact, DIPhase, LessonAttempt } from "@/lib/types";
 import { Numpad } from "./Numpad";
 import { FactVisualizer } from "./FactVisualizer";
+import { DynamicRuleCard } from "./DynamicRuleCard";
 import { soundEffects } from "@/lib/sounds";
 
 interface LessonEngineProps {
@@ -443,15 +444,14 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
               </span>
             </div>
 
-            {/* Explicit Rule Callout */}
-            <div className="w-full p-4 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex flex-col gap-1.5 text-left">
-              <span className="text-xs font-black uppercase tracking-wider text-purple-300">
-                Rule: {lesson.ruleName}
-              </span>
-              <p className="text-xs sm:text-sm text-purple-100 font-medium leading-relaxed">
-                {lesson.ruleSummary}
-              </p>
-            </div>
+            {/* Explicit Dynamic Rule Engine Model */}
+            <DynamicRuleCard
+              lessonId={lesson.id}
+              factorA={currentFact.a}
+              factorB={currentFact.b}
+              mode="full"
+            />
+
 
             {/* Visual Representation (Equal Groups) */}
             <FactVisualizer
@@ -473,17 +473,14 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
           <>
             {/* Visual & Problem Card */}
             <div className="w-full flex-1 max-w-lg p-3 sm:p-6 rounded-3xl bg-white/[0.03] border border-white/10 backdrop-blur-2xl shadow-2xl flex flex-col items-center gap-2.5 sm:gap-4 my-auto">
-              {/* Rule Hint / Guided Prompt */}
+              {/* Dynamic Rule Guided Step Engine */}
               {phase === "guided" && (
-                <div className="w-full px-3 py-1 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[11px] sm:text-xs font-bold flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3 text-amber-400" />
-                    <span>Rule: {lesson.ruleName}</span>
-                  </div>
-                  <span className="text-[10px] text-amber-200/70 hidden xs:inline">
-                    Guided
-                  </span>
-                </div>
+                <DynamicRuleCard
+                  lessonId={lesson.id}
+                  factorA={currentFact.a}
+                  factorB={currentFact.b}
+                  mode="guided"
+                />
               )}
 
               {/* Big Math Fact Equation (Ergonomic for iPhone 15 portrait) */}
