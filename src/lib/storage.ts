@@ -1,7 +1,7 @@
 import { StudentProfile, LessonAttempt, TeacherAnalytics, FactMasteryRecord } from "./types";
 
-const STORAGE_KEY = "chadmath_di_students_v1";
-const ACTIVE_STUDENT_KEY = "chadmath_di_active_student_id";
+const STORAGE_KEY = "chadmath_di_students_v3";
+const ACTIVE_STUDENT_KEY = "chadmath_di_active_student_v3";
 export const TEACHER_PIN = "9999";
 
 // Generate an empty 1x1 to 9x9 fact mastery map
@@ -122,11 +122,19 @@ function createSeededStudent(
 }
 
 const SEED_STUDENTS: StudentProfile[] = [
-  createSeededStudent("s1", "Leo Rivera", "🦁", 4, [1, 2], [3, 5], 4, 380),
-  createSeededStudent("s2", "Maya Patel", "🐬", 7, [1, 2, 5, 3, 4], [9, 6], 8, 850),
-  createSeededStudent("s3", "Sammy Chen", "🚀", 3, [1], [2, 5], 2, 210),
-  createSeededStudent("s4", "Ava Jenkins", "🦄", 10, [1, 2, 3, 4, 5, 6, 9], [7, 8], 14, 1260),
-  createSeededStudent("s5", "Noah Smith", "⚡", 2, [1], [2], 1, 140),
+  {
+    id: "student-1",
+    name: "Student",
+    avatar: "🦁",
+    currentLessonId: 1,
+    totalMinutesPracticed: 0,
+    totalLessonsCompleted: 0,
+    streakDays: 0,
+    xp: 0,
+    lastActive: new Date().toISOString(),
+    factMastery: generateEmptyFactMastery(),
+    lessonHistory: [],
+  },
 ];
 
 export function loadAllStudents(): StudentProfile[] {
