@@ -40,28 +40,47 @@ class SoundController {
     osc.stop(ctx.currentTime + 0.04);
   }
 
-  public playCorrect() {
+  public playCorrect(streak: number = 1) {
     if (!this.enabled) return;
     const ctx = this.initCtx();
     if (!ctx) return;
 
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
+    // Escalating Pentatonic Musical Scale
+    const scale = [
+      [523.25, 659.25],          // 1: C5 + E5
+      [587.33, 783.99],          // 2: D5 + G5
+      [659.25, 880.00],          // 3: E5 + A5
+      [783.99, 1046.50],         // 4: G5 + C6
+      [880.00, 1046.50, 1318.51], // 5: A5 + C6 + E6 (Triad!)
+      [1046.50, 1318.51, 1567.98],// 6: C6 + E6 + G6
+      [1174.66, 1567.98, 1760.00],// 7: D6 + G6 + A6
+      [1318.51, 1760.00, 2093.00],// 8: E6 + A6 + C7
+      [1567.98, 2093.00, 2637.02],// 9: G6 + C7 + E7
+    ];
+
+    const isSupernova = streak >= 10;
+    const notes = isSupernova
+      ? [523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98, 2093.00] // Full 7-note arpeggio!
+      : scale[Math.min(scale.length - 1, Math.max(0, streak - 1))];
+
+    const noteDuration = isSupernova ? 0.05 : 0.04;
     notes.forEach((freq, idx) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
-      osc.type = "triangle";
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.06);
+      osc.type = isSupernova ? "sine" : "triangle";
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * noteDuration);
 
-      gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.06);
-      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + idx * 0.06 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.06 + 0.25);
+      const peakVolume = isSupernova ? 0.16 : 0.18 + Math.min(0.06, streak * 0.008);
+      gain.gain.setValueAtTime(0, ctx.currentTime + idx * noteDuration);
+      gain.gain.linearRampToValueAtTime(peakVolume, ctx.currentTime + idx * noteDuration + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * noteDuration + 0.3);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.start(ctx.currentTime + idx * 0.06);
-      osc.stop(ctx.currentTime + idx * 0.06 + 0.25);
+      osc.start(ctx.currentTime + idx * noteDuration);
+      osc.stop(ctx.currentTime + idx * noteDuration + 0.32);
     });
   }
 

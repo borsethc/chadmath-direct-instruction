@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
+  ArrowLeft,
   RotateCcw,
   Volume2,
   X,
@@ -47,6 +48,12 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
   const [correctCount, setCorrectCount] = useState<number>(0);
   const [errorFacts, setErrorFacts] = useState<string[]>([]);
   const [currentStreak, setCurrentStreak] = useState<number>(0);
+  const [streakToast, setStreakToast] = useState<{
+    tier: "hot" | "supercharged" | "unstoppable" | "supernova";
+    title: string;
+    subtitle: string;
+    emoji: string;
+  } | null>(null);
 
   // Response time tracking
   const questionStartTimeRef = useRef<number>(Date.now());
@@ -139,10 +146,46 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
 
       if (answerNum === currentFact.product) {
         // CORRECT ANSWER!
-        soundEffects.playCorrect();
+        const nextStreak = currentStreak + 1;
+        setCurrentStreak(nextStreak);
+        soundEffects.playCorrect(nextStreak);
         setCorrectCount((prev) => prev + 1);
-        setCurrentStreak((prev) => prev + 1);
         setErrorMessage(null);
+
+        // Milestone Streak Celebrations
+        if (nextStreak === 3) {
+          setStreakToast({
+            tier: "hot",
+            title: "3 In A Row!",
+            subtitle: "Warming up nicely 🔥",
+            emoji: "🔥",
+          });
+          setTimeout(() => setStreakToast(null), 1800);
+        } else if (nextStreak === 5) {
+          setStreakToast({
+            tier: "supercharged",
+            title: "5 Streak: Supercharged!",
+            subtitle: "Pitch is rising ⚡",
+            emoji: "⚡",
+          });
+          setTimeout(() => setStreakToast(null), 1800);
+        } else if (nextStreak === 8) {
+          setStreakToast({
+            tier: "unstoppable",
+            title: "8 Streak: UNSTOPPABLE!",
+            subtitle: "Total flow state 🚀",
+            emoji: "🚀",
+          });
+          setTimeout(() => setStreakToast(null), 1800);
+        } else if (nextStreak >= 10 && nextStreak % 5 === 0) {
+          setStreakToast({
+            tier: "supernova",
+            title: `${nextStreak} STREAK: SUPERNOVA!`,
+            subtitle: "Mastery automaticity unlocked 🌟",
+            emoji: "🌟",
+          });
+          setTimeout(() => setStreakToast(null), 2200);
+        }
 
         if (isErrorCorrecting) {
           // Passed the correction test! Move to next question
@@ -155,6 +198,7 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
         // INCORRECT ANSWER: Direct Instruction Immediate Error Correction
         soundEffects.playIncorrect();
         setCurrentStreak(0);
+        setStreakToast(null);
         const factKey = `${currentFact.a}x${currentFact.b}`;
         setErrorFacts((prev) => (prev.includes(factKey) ? prev : [...prev, factKey]));
 
@@ -166,7 +210,7 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
         );
       }
     },
-    [currentFact, isErrorCorrecting, loadNextQuestionInPhase, phase, phaseStepIndex]
+    [currentFact, currentStreak, isErrorCorrecting, loadNextQuestionInPhase, phase, phaseStepIndex]
   );
 
   // 4. Handle input changes (Limit to 2 digits, Auto-advance on correct answer)
@@ -227,6 +271,33 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
 
   return (
     <div className="w-full min-h-[calc(100vh-64px)] flex flex-col items-center justify-between p-2 sm:p-4 md:p-6 select-none relative overflow-hidden">
+      {/* Dynamic Animated Streak Milestone Banner */}
+      <AnimatePresence>
+        {streakToast && (
+          <motion.div
+            initial={{ scale: 0.5, y: -20, opacity: 0 }}
+            animate={{ scale: [1, 1.1, 1], y: 0, opacity: 1 }}
+            exit={{ scale: 0.8, y: -20, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className={`fixed top-18 left-1/2 -translate-x-1/2 z-50 px-5 py-2 rounded-full border-2 shadow-2xl flex items-center gap-2.5 backdrop-blur-xl pointer-events-none ${
+              streakToast.tier === "supernova"
+                ? "bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 border-amber-300 text-white shadow-[0_0_35px_rgba(245,158,11,0.8)]"
+                : streakToast.tier === "unstoppable"
+                ? "bg-purple-950/90 border-purple-400 text-purple-200 shadow-[0_0_25px_rgba(168,85,247,0.6)]"
+                : streakToast.tier === "supercharged"
+                ? "bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_20px_rgba(6,182,212,0.6)]"
+                : "bg-amber-950/90 border-amber-400 text-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+            }`}
+          >
+            <span className="text-xl">{streakToast.emoji}</span>
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-black uppercase tracking-wider">{streakToast.title}</span>
+              <span className="text-[10px] opacity-80">{streakToast.subtitle}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* 5-MINUTE LESSON PROGRESS & COUNTDOWN HEADER */}
       <div className="w-full max-w-4xl flex flex-col gap-2 shrink-0 z-20">
         <div className="flex items-center justify-between px-2">
@@ -259,19 +330,20 @@ export function LessonEngine({ lesson, onLessonComplete, onExit }: LessonEngineP
             </div>
           </div>
 
-          {/* 5-Min Timer Display & Exit */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-black/50 border border-white/15 text-white shadow-inner font-mono font-bold text-sm">
+          {/* 5-Min Timer Display & Main Menu Return Button */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-black/50 border border-white/15 text-white shadow-inner font-mono font-bold text-xs sm:text-sm">
               <Clock className="w-4 h-4 text-cyan-400" />
               <span>{formatTime(secondsRemaining)}</span>
             </div>
 
             <button
               onClick={onExit}
-              className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white flex items-center justify-center transition-all cursor-pointer"
-              title="Exit lesson"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/25 border border-white/20 text-white font-bold text-xs sm:text-sm transition-all shadow-sm group cursor-pointer"
+              title="Return to Main Menu"
             >
-              <X className="w-4 h-4" />
+              <ArrowLeft className="w-3.5 h-3.5 text-cyan-400 group-hover:-translate-x-0.5 transition-transform" />
+              <span>Main Menu</span>
             </button>
           </div>
         </div>
