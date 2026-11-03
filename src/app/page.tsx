@@ -62,7 +62,9 @@ export default function Home() {
       setActiveStudent(updated);
       setStudents(loadAllStudents());
     }
-    setConfettiTrigger(true);
+    if (attemptData.checkoutPassed) {
+      setConfettiTrigger(true);
+    }
     setCurrentView("dashboard");
   };
 

@@ -280,12 +280,16 @@ export function recordLessonComplete(
   student.lessonHistory.unshift(newAttempt);
   student.totalLessonsCompleted += 1;
   student.totalMinutesPracticed += Math.max(1, Math.round(attempt.durationSeconds / 60));
-  student.xp += attempt.starsEarned * 50 + attempt.correctCount * 5;
+  
+  // Award XP (bonus 150 XP if checkout was verified)
+  const masteryBonus = attempt.checkoutPassed ? 150 : 0;
+  student.xp += attempt.starsEarned * 50 + attempt.correctCount * 5 + masteryBonus;
   student.streakDays = (student.streakDays || 0) + 1;
   student.lastActive = new Date().toISOString();
 
-  // If learner achieved 80%+ accuracy, advance their recommended lesson level!
-  if (attempt.accuracyPercent >= 80 && student.currentLessonId === attempt.lessonId) {
+  // Direct Instruction Rule: Only advance lesson if Checkout Gate was actually passed!
+  const isMastered = attempt.checkoutPassed ?? (attempt.accuracyPercent >= 80);
+  if (isMastered && student.currentLessonId === attempt.lessonId) {
     student.currentLessonId = Math.min(11, student.currentLessonId + 1);
   }
 

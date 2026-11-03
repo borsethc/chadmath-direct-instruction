@@ -400,7 +400,18 @@ export function TeacherDashboard({
                           {new Date(h.timestamp).toLocaleDateString()}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5">
+                        {h.checkoutPassed !== undefined && (
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              h.checkoutPassed
+                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            }`}
+                          >
+                            {h.checkoutPassed ? "✓ Verified" : "Needs Firming"}
+                          </span>
+                        )}
                         <span className="text-cyan-300 font-bold">{h.accuracyPercent}% Accuracy</span>
                         <span className="text-amber-400 font-bold">{"★".repeat(h.starsEarned)}</span>
                       </div>

@@ -1,4 +1,4 @@
-export type DIPhase = "review" | "model" | "guided" | "fluency" | "complete";
+export type DIPhase = "review" | "model" | "guided" | "fluency" | "checkout" | "complete";
 
 export interface MathFact {
   a: number; // Factor A (1..9)
@@ -52,6 +52,12 @@ export interface LessonAttempt {
   correctCount: number;
   errorFacts: string[];
   starsEarned: 1 | 2 | 3;
+  checkoutPassed?: boolean;
+  checkoutScore?: {
+    correct: number;
+    total: number;
+    averageLatencyMs: number;
+  };
 }
 
 export interface StudentProfile {
