@@ -56,12 +56,13 @@ export function FactVisualizer({
       </div>
 
       {/* Visual Canvas Container */}
-      <div className="w-full min-h-[140px] max-h-[220px] rounded-2xl bg-black/40 border border-white/10 p-3 sm:p-4 flex flex-col items-center justify-center gap-3 overflow-y-auto backdrop-blur-md shadow-inner">
+      <div className="w-full min-h-[95px] sm:min-h-[130px] max-h-[155px] sm:max-h-[210px] rounded-2xl bg-black/40 border border-white/10 p-2 sm:p-3.5 flex flex-col items-center justify-center gap-2 overflow-y-auto backdrop-blur-md shadow-inner">
         {viewMode === "groups" ? (
           /* Equal Groups View */
-          <div className="w-full flex flex-wrap items-center justify-center gap-2 sm:gap-2.5">
+          <div className="w-full flex flex-wrap items-center justify-center gap-1.5 sm:gap-2.5">
             {Array.from({ length: factorA }).map((_, gIdx) => {
               const isActive = activeGroupIndex === gIdx;
+              const isLargeGroup = factorB >= 6;
               return (
                 <motion.div
                   key={gIdx}
@@ -71,22 +72,26 @@ export function FactVisualizer({
                     opacity: 1,
                   }}
                   transition={{ duration: 0.2 }}
-                  className={`relative p-2 rounded-xl border flex flex-col items-center justify-center gap-1.5 transition-all ${
+                  className={`relative p-1 sm:p-2 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
                     isActive
                       ? "bg-cyan-500/20 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]"
                       : "bg-white/[0.03] border-white/10 hover:border-white/20"
                   }`}
                 >
-                  <span className="text-[10px] font-black uppercase tracking-wider text-white/40">
+                  <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-white/40">
                     Group {gIdx + 1}
                   </span>
 
                   {/* Dots inside this group */}
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5 sm:gap-1">
                     {Array.from({ length: factorB }).map((_, dotIdx) => (
                       <div
                         key={dotIdx}
-                        className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] font-black shadow-sm ${
+                        className={`${
+                          isLargeGroup
+                            ? "w-3 h-3 sm:w-4 sm:h-4 text-[7px] sm:text-[8px]"
+                            : "w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-[8px] sm:text-[9px]"
+                        } rounded-full flex items-center justify-center font-black shadow-sm ${
                           isActive
                             ? "bg-gradient-to-br from-cyan-400 to-blue-500 text-black animate-pulse"
                             : "bg-gradient-to-br from-amber-400 to-amber-600 text-black"
@@ -102,10 +107,10 @@ export function FactVisualizer({
           </div>
         ) : (
           /* Grid Array View */
-          <div className="flex flex-col items-center gap-1 sm:gap-1.5">
+          <div className="flex flex-col items-center gap-0.5 sm:gap-1">
             {Array.from({ length: factorA }).map((_, rowIdx) => (
-              <div key={rowIdx} className="flex items-center gap-1 sm:gap-1.5">
-                <span className="text-[9px] font-bold text-white/30 w-4 text-right">
+              <div key={rowIdx} className="flex items-center gap-0.5 sm:gap-1">
+                <span className="text-[8px] font-bold text-white/30 w-3 text-right">
                   R{rowIdx + 1}
                 </span>
                 {Array.from({ length: factorB }).map((_, colIdx) => (
@@ -113,8 +118,8 @@ export function FactVisualizer({
                     key={colIdx}
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    transition={{ delay: (rowIdx * factorB + colIdx) * 0.02 }}
-                    className="w-4 h-4 sm:w-5 sm:h-5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 border border-white/20 flex items-center justify-center text-[8px] font-bold text-white/80 shadow-sm"
+                    transition={{ delay: (rowIdx * factorB + colIdx) * 0.015 }}
+                    className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 border border-white/20 flex items-center justify-center text-[7px] font-bold text-white/80 shadow-sm"
                   >
                     •
                   </motion.div>
@@ -125,8 +130,8 @@ export function FactVisualizer({
         )}
 
         {/* Repeated Addition Equation Bar */}
-        <div className="w-full pt-1.5 border-t border-white/5 flex items-center justify-center gap-1 flex-wrap text-xs sm:text-sm font-mono text-white/80">
-          <span className="text-white/40 font-sans text-xs">Repeated Addition:</span>
+        <div className="w-full pt-1 border-t border-white/5 flex items-center justify-center gap-1 flex-wrap text-[11px] sm:text-xs font-mono text-white/80">
+          <span className="text-white/40 font-sans text-[10px]">Addition:</span>
           <span className="text-amber-300 font-bold">
             {Array.from({ length: factorA }).map(() => factorB).join(" + ")}
           </span>

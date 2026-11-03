@@ -208,41 +208,41 @@ export function StudentDashboard({
         </div>
 
         {/* 9x9 MULTIPLICATION MASTERY HEATMAP */}
-        <div className="p-5 sm:p-6 rounded-3xl bg-white/[0.03] border border-white/10 backdrop-blur-2xl flex flex-col gap-4">
+        <div className="p-3.5 sm:p-6 rounded-3xl bg-white/[0.03] border border-white/10 backdrop-blur-2xl flex flex-col gap-3 sm:gap-4 overflow-hidden">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-amber-400" />
-              <h2 className="text-base font-black text-white">9×9 Fact Mastery Grid</h2>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+              <h2 className="text-sm sm:text-base font-black text-white">9×9 Fact Mastery Grid</h2>
             </div>
-            <span className="text-xs text-white/50">{masteredCount} of 81 Mastered</span>
+            <span className="text-[11px] sm:text-xs text-white/50">{masteredCount}/81 Mastered</span>
           </div>
 
           {/* Color Legend */}
-          <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap">
+          <div className="flex items-center gap-2 text-[9px] sm:text-[10px] font-bold flex-wrap">
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-emerald-400" /> Mastered (&lt; 2.5s)
+              <span className="w-2 h-2 rounded bg-emerald-400" /> Mastered
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-amber-400" /> Progressing
+              <span className="w-2 h-2 rounded bg-amber-400" /> Progressing
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-rose-500" /> Learning
+              <span className="w-2 h-2 rounded bg-rose-500" /> Learning
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded bg-white/10" /> Unreached
+              <span className="w-2 h-2 rounded bg-white/10" /> Unreached
             </span>
           </div>
 
-          {/* 9x9 Interactive Grid */}
-          <div className="grid grid-cols-10 gap-1 p-2 rounded-2xl bg-black/40 border border-white/10">
+          {/* 9x9 Interactive Grid (Formatted specifically for 393px iPhone 15 width) */}
+          <div className="grid grid-cols-10 gap-0.5 sm:gap-1 p-1 sm:p-2 rounded-2xl bg-black/40 border border-white/10">
             {/* Corner */}
-            <div className="flex items-center justify-center text-[10px] font-black text-white/30">
+            <div className="flex items-center justify-center text-[9px] sm:text-[10px] font-black text-white/30">
               ×
             </div>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => (
               <div
                 key={col}
-                className="flex items-center justify-center text-[10px] font-black text-cyan-300"
+                className="flex items-center justify-center text-[9px] sm:text-[10px] font-black text-cyan-300"
               >
                 {col}
               </div>
@@ -250,7 +250,7 @@ export function StudentDashboard({
 
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
               <div key={row} className="contents">
-                <div className="flex items-center justify-center text-[10px] font-black text-purple-300">
+                <div className="flex items-center justify-center text-[9px] sm:text-[10px] font-black text-purple-300">
                   {row}
                 </div>
                 {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => {
@@ -267,7 +267,7 @@ export function StudentDashboard({
                     <button
                       key={col}
                       onClick={() => setSelectedFactInfo({ a: row, b: col, status })}
-                      className={`h-7 rounded-md flex items-center justify-center text-[10px] transition-transform hover:scale-115 active:scale-95 cursor-pointer shadow-sm ${bg}`}
+                      className={`h-6 sm:h-7 rounded flex items-center justify-center text-[8px] sm:text-[10px] transition-transform active:scale-90 touch-manipulation cursor-pointer shadow-sm ${bg}`}
                       title={`${row} × ${col} = ${row * col} (${status})`}
                     >
                       {row * col}

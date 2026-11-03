@@ -33,9 +33,9 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
 
   return (
     <div className="w-full shrink-0 select-none">
-      {/* Mobile 2-Row Thumb Bar (< 768px) */}
-      <div className="block md:hidden w-full max-w-sm mx-auto px-1 py-1">
-        <div className="flex flex-col gap-1.5 bg-black/40 border border-white/10 p-2 rounded-2xl backdrop-blur-xl shadow-lg">
+      {/* Mobile 2-Row Thumb Bar (< 768px with iPhone 15 safe area clearance) */}
+      <div className="block md:hidden w-full max-w-sm mx-auto px-1 py-1 pb-safe">
+        <div className="flex flex-col gap-1.5 bg-black/60 border border-white/15 p-1.5 sm:p-2 rounded-2xl backdrop-blur-2xl shadow-xl">
           {/* Row 1: 1 2 3 4 5 */}
           <div className="flex items-center justify-between gap-1 w-full">
             {["1", "2", "3", "4", "5"].map((num) => (
