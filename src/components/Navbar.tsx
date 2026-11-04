@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Volume2, VolumeX, ShieldCheck, Flame, UserCheck, Sparkles, GraduationCap } from "lucide-react";
+import { Volume2, VolumeX, Flame, GraduationCap, Lock, KeyRound } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
 import { soundEffects } from "@/lib/sounds";
-import { TEACHER_PIN } from "@/lib/storage";
+import { hasTeacherPinSet, setTeacherPin, verifyTeacherPin } from "@/lib/storage";
 
 interface NavbarProps {
   currentStudent: StudentProfile | null;
@@ -23,8 +23,15 @@ export function Navbar({
 }: NavbarProps) {
   const [isMuted, setIsMuted] = useState(!soundEffects.enabled);
   const [showPinModal, setShowPinModal] = useState(false);
+  const [isOwnerSetup, setIsOwnerSetup] = useState(false);
+  
+  // Unlock state
   const [enteredPin, setEnteredPin] = useState("");
-  const [pinError, setPinError] = useState(false);
+  const [pinError, setPinError] = useState("");
+
+  // Setup state
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
 
   const toggleSound = () => {
     soundEffects.enabled = !soundEffects.enabled;
@@ -35,21 +42,40 @@ export function Navbar({
     if (isTeacherView) {
       onGoHome();
     } else {
-      setShowPinModal(true);
+      const pinConfigured = hasTeacherPinSet();
+      setIsOwnerSetup(!pinConfigured);
       setEnteredPin("");
-      setPinError(false);
+      setNewPin("");
+      setConfirmPin("");
+      setPinError("");
+      setShowPinModal(true);
     }
   };
 
-  const handlePinSubmit = (e: React.FormEvent) => {
+  const handleUnlockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (enteredPin === TEACHER_PIN) {
+    if (verifyTeacherPin(enteredPin)) {
       setShowPinModal(false);
       onOpenTeacherDashboard();
     } else {
-      setPinError(true);
+      setPinError("Incorrect PIN. Please try again.");
       soundEffects.playIncorrect();
     }
+  };
+
+  const handleSetupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPin.length < 4) {
+      setPinError("PIN must be at least 4 digits.");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setPinError("PINs do not match. Please re-enter.");
+      return;
+    }
+    setTeacherPin(newPin);
+    setShowPinModal(false);
+    onOpenTeacherDashboard();
   };
 
   return (
@@ -102,7 +128,7 @@ export function Navbar({
               {/* Streak Flame */}
               <div className="flex items-center gap-0.5 px-1 py-0.2 sm:px-1.5 sm:py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] sm:text-[10px] font-black ml-0.5">
                 <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-current" />
-                <span>{currentStudent.streakDays || 1}d</span>
+                <span>{currentStudent.streakDays || 0}d</span>
               </div>
             </button>
           )}
@@ -140,57 +166,146 @@ export function Navbar({
 
       {/* Teacher PIN Modal */}
       {showPinModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-sm rounded-3xl bg-[#0f121d] border border-white/15 p-6 shadow-2xl flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <h3 className="font-black text-white text-base">Teacher Portal Access</h3>
-                <span className="text-xs text-white/50">Enter teacher PIN to track progress</span>
-              </div>
-            </div>
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-sm rounded-3xl bg-[#0f121d] border border-white/15 p-6 shadow-2xl flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            {isOwnerSetup ? (
+              // One-time Owner Setup Mode
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <h3 className="font-black text-white text-base">Set Owner Teacher PIN</h3>
+                    <span className="text-xs text-white/50">One-time private setup</span>
+                  </div>
+                </div>
 
-            <form onSubmit={handlePinSubmit} className="flex flex-col gap-3">
-              <input
-                type="password"
-                maxLength={4}
-                autoFocus
-                value={enteredPin}
-                onChange={(e) => {
-                  setPinError(false);
-                  setEnteredPin(e.target.value.replace(/[^0-9]/g, ""));
-                }}
-                placeholder="Enter PIN (Default: 9999)"
-                className="w-full h-12 rounded-2xl bg-black/50 border-2 border-white/15 text-center text-xl font-mono tracking-widest text-white focus:border-amber-400 outline-none"
-              />
+                <p className="text-xs text-white/70 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/10">
+                  Set a 4 to 8 digit PIN for your private teacher dashboard. This PIN will be stored securely on this device and will never be displayed again.
+                </p>
 
-              {pinError && (
-                <span className="text-xs text-rose-400 text-center font-bold">
-                  Incorrect PIN! Use default PIN 9999.
-                </span>
-              )}
+                <form onSubmit={handleSetupSubmit} className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-white/60 uppercase tracking-wider">
+                      Create New PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={8}
+                      autoFocus
+                      value={newPin}
+                      onChange={(e) => {
+                        setPinError("");
+                        setNewPin(e.target.value.replace(/[^0-9]/g, ""));
+                      }}
+                      placeholder="••••"
+                      className="w-full h-11 rounded-xl bg-black/60 border border-white/20 text-center text-xl font-mono tracking-widest text-white focus:border-amber-400 outline-none"
+                    />
+                  </div>
 
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPinModal(false)}
-                  className="flex-1 h-11 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 h-11 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/20 cursor-pointer"
-                >
-                  Unlock
-                </button>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-white/60 uppercase tracking-wider">
+                      Confirm PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={8}
+                      value={confirmPin}
+                      onChange={(e) => {
+                        setPinError("");
+                        setConfirmPin(e.target.value.replace(/[^0-9]/g, ""));
+                      }}
+                      placeholder="••••"
+                      className="w-full h-11 rounded-xl bg-black/60 border border-white/20 text-center text-xl font-mono tracking-widest text-white focus:border-amber-400 outline-none"
+                    />
+                  </div>
+
+                  {pinError && (
+                    <span className="text-xs text-rose-400 text-center font-bold">
+                      {pinError}
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPinModal(false)}
+                      className="flex-1 h-11 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={newPin.length < 4 || newPin !== confirmPin}
+                      className="flex-1 h-11 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 disabled:opacity-50 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/20 cursor-pointer"
+                    >
+                      Save & Unlock
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            ) : (
+              // Standard Unlock Mode
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                    <Lock className="w-5 h-5" />
+                  </div>
+                  <div className="flex flex-col">
+                    <h3 className="font-black text-white text-base">Teacher Portal Access</h3>
+                    <span className="text-xs text-white/50">Private teacher dashboard</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleUnlockSubmit} className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-bold text-white/60 uppercase tracking-wider">
+                      Enter PIN
+                    </label>
+                    <input
+                      type="password"
+                      maxLength={8}
+                      autoFocus
+                      value={enteredPin}
+                      onChange={(e) => {
+                        setPinError("");
+                        setEnteredPin(e.target.value.replace(/[^0-9]/g, ""));
+                      }}
+                      placeholder="••••"
+                      className="w-full h-12 rounded-2xl bg-black/60 border-2 border-white/15 text-center text-xl font-mono tracking-widest text-white focus:border-amber-400 outline-none"
+                    />
+                  </div>
+
+                  {pinError && (
+                    <span className="text-xs text-rose-400 text-center font-bold">
+                      {pinError}
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowPinModal(false)}
+                      className="flex-1 h-11 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={enteredPin.length < 4}
+                      className="flex-1 h-11 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 disabled:opacity-50 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/20 cursor-pointer"
+                    >
+                      Unlock
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}
     </>
   );
 }
+

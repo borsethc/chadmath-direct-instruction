@@ -13,17 +13,21 @@ import {
   Eye,
   CheckCircle2,
   X,
-  FileSpreadsheet,
   GraduationCap,
   Sparkles,
+  Lock,
+  ListRestart,
+  HelpCircle,
+  Play,
 } from "lucide-react";
-import { StudentProfile, TeacherAnalytics } from "@/lib/types";
+import { StudentProfile, TeacherAnalytics, FactMasteryRecord } from "@/lib/types";
 import {
   computeTeacherAnalytics,
   exportClassDataCsv,
   resetStudent,
   createNewStudent,
   loadAllStudents,
+  removeFromReDrillQueue,
 } from "@/lib/storage";
 
 interface TeacherDashboardProps {
@@ -38,6 +42,7 @@ export function TeacherDashboard({
   const [students, setStudents] = useState<StudentProfile[]>(loadAllStudents());
   const [analytics, setAnalytics] = useState<TeacherAnalytics>(computeTeacherAnalytics());
   const [inspectingStudent, setInspectingStudent] = useState<StudentProfile | null>(null);
+  const [studentDetailTab, setStudentDetailTab] = useState<"heatmap" | "redrill" | "facts">("heatmap");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentAvatar, setNewStudentAvatar] = useState("🦁");
@@ -88,11 +93,16 @@ export function TeacherDashboard({
             <GraduationCap className="w-6 h-6" />
           </div>
           <div className="flex flex-col">
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Teacher Analytics & Progress Tracker
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                Teacher Analytics
+              </h1>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider">
+                Private Portal
+              </span>
+            </div>
             <p className="text-xs sm:text-sm text-white/60">
-              Monitoring Direct Instruction fidelity, automaticity, and 5-minute daily lesson mastery
+              Single-user private dashboard monitoring direct instruction mastery, accuracy, and re-drill queue
             </p>
           </div>
         </div>
@@ -111,9 +121,26 @@ export function TeacherDashboard({
             className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <Download className="w-4 h-4 text-emerald-400" />
-            <span>Export CSV Report</span>
+            <span>Export CSV</span>
+          </button>
+
+          <button
+            onClick={onBackToApp}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-amber-500/20 cursor-pointer"
+          >
+            Return to App
           </button>
         </div>
+      </div>
+
+      {/* Accuracy Formula Banner */}
+      <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <HelpCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+          <span className="font-bold">Accuracy Formula: </span>
+          <span className="font-mono text-cyan-300">{analytics.accuracyFormula}</span>
+        </div>
+        <span className="text-[10px] text-cyan-400/80 italic">Verified against recorded attempts</span>
       </div>
 
       {/* Analytics KPI Stat Cards */}
@@ -124,40 +151,40 @@ export function TeacherDashboard({
             <Users className="w-4 h-4 text-cyan-400" />
           </div>
           <span className="text-2xl sm:text-3xl font-black text-white">{analytics.totalStudents}</span>
-          <span className="text-[11px] text-white/40">Active in Classroom</span>
+          <span className="text-[11px] text-white/40">Private Local Profile</span>
         </div>
 
         <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col gap-1">
           <div className="flex items-center justify-between text-white/50 text-xs font-bold">
-            <span>5-Min Lessons Completed</span>
+            <span>Sessions Practiced</span>
             <Clock className="w-4 h-4 text-emerald-400" />
           </div>
           <span className="text-2xl sm:text-3xl font-black text-emerald-400">
             {analytics.totalLessonsCompleted}
           </span>
-          <span className="text-[11px] text-white/40">{analytics.totalMinutesLogged} Total Practice Mins</span>
+          <span className="text-[11px] text-white/40">{analytics.totalMinutesLogged} Practice Minutes</span>
         </div>
 
         <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col gap-1">
           <div className="flex items-center justify-between text-white/50 text-xs font-bold">
-            <span>Class Average Mastery</span>
+            <span>Average Fact Mastery</span>
             <Award className="w-4 h-4 text-amber-400" />
           </div>
           <span className="text-2xl sm:text-3xl font-black text-amber-400">
             {analytics.classAverageMastery}%
           </span>
-          <span className="text-[11px] text-white/40">Accurate & Automatic (&lt; 2.5s)</span>
+          <span className="text-[11px] text-white/40">Verified via Gate Pass</span>
         </div>
 
         <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col gap-1">
           <div className="flex items-center justify-between text-white/50 text-xs font-bold">
-            <span>Overall Accuracy</span>
+            <span>First-Try Accuracy</span>
             <Sparkles className="w-4 h-4 text-purple-400" />
           </div>
           <span className="text-2xl sm:text-3xl font-black text-purple-400">
             {analytics.classAverageAccuracy}%
           </span>
-          <span className="text-[11px] text-white/40">Across all guided & fluency phases</span>
+          <span className="text-[11px] text-white/40">Guided & Fluency (No copies)</span>
         </div>
       </div>
 
@@ -168,10 +195,10 @@ export function TeacherDashboard({
             <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
             <div className="flex flex-col">
               <span className="text-xs font-black uppercase tracking-wider text-rose-300">
-                Class Direct Instruction Re-Teaching Needed
+                Direct Instruction Re-Teaching Needed
               </span>
               <span className="text-xs text-rose-100">
-                These specific facts generated the highest corrective feedback attempts across students:
+                Facts with corrective feedback triggers:
               </span>
             </div>
           </div>
@@ -199,9 +226,10 @@ export function TeacherDashboard({
               <tr className="border-b border-white/10 text-white/40 uppercase font-black tracking-wider text-[10px]">
                 <th className="pb-3 px-2">Student</th>
                 <th className="pb-3 px-2">Current DI Lesson</th>
+                <th className="pb-3 px-2">Mastered Lessons</th>
                 <th className="pb-3 px-2">Mastered Facts</th>
-                <th className="pb-3 px-2">Time Logged</th>
-                <th className="pb-3 px-2">Streak</th>
+                <th className="pb-3 px-2">Re-Drill Queue</th>
+                <th className="pb-3 px-2">Streak (Chicago)</th>
                 <th className="pb-3 px-2 text-right">Actions</th>
               </tr>
             </thead>
@@ -211,6 +239,7 @@ export function TeacherDashboard({
                   (f) => f.status === "mastered"
                 ).length;
                 const masteredPercent = Math.round((masteredCount / 81) * 100);
+                const reDrillCount = student.reDrillQueue?.length || 0;
 
                 return (
                   <tr key={student.id} className="hover:bg-white/[0.02] transition-colors">
@@ -223,6 +252,11 @@ export function TeacherDashboard({
                     {/* Lesson Level */}
                     <td className="py-3 px-2 font-bold text-cyan-300">
                       Lesson {student.currentLessonId}
+                    </td>
+
+                    {/* Mastered Lessons */}
+                    <td className="py-3 px-2 font-bold text-emerald-400">
+                      {student.totalLessonsMastered || 0} / 11
                     </td>
 
                     {/* Mastered Facts Progress */}
@@ -240,32 +274,41 @@ export function TeacherDashboard({
                       </div>
                     </td>
 
-                    {/* Time Logged */}
-                    <td className="py-3 px-2 font-mono text-white/60">
-                      {student.totalMinutesPracticed} mins
+                    {/* Re-Drill Queue Count */}
+                    <td className="py-3 px-2">
+                      {reDrillCount > 0 ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">
+                          {reDrillCount} queued
+                        </span>
+                      ) : (
+                        <span className="text-white/30 italic">None</span>
+                      )}
                     </td>
 
                     {/* Streak */}
                     <td className="py-3 px-2 font-bold text-amber-400">
-                      {student.streakDays} days
+                      {student.streakDays || 0} days
                     </td>
 
                     {/* Actions */}
                     <td className="py-3 px-2 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => setInspectingStudent(student)}
+                          onClick={() => {
+                            setInspectingStudent(student);
+                            setStudentDetailTab("heatmap");
+                          }}
                           className="px-2.5 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
-                          <span>Heatmap</span>
+                          <span>Inspect</span>
                         </button>
 
                         <button
                           onClick={() => onSelectStudentToPlay(student)}
                           className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-[11px] transition-colors cursor-pointer"
                         >
-                          Launch Lesson
+                          Launch
                         </button>
 
                         <button
@@ -285,21 +328,22 @@ export function TeacherDashboard({
         </div>
       </div>
 
-      {/* STUDENT DETAIL / 9x9 HEATMAP MODAL */}
+      {/* STUDENT DETAIL INSPECTOR MODAL */}
       {inspectingStudent && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 z-50 overflow-y-auto">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-2xl rounded-3xl bg-[#0f121d] border border-white/15 p-5 sm:p-6 shadow-2xl flex flex-col gap-4 my-auto max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-3xl rounded-3xl bg-[#0f121d] border border-white/15 p-5 sm:p-6 shadow-2xl flex flex-col gap-4 my-auto max-h-[90vh] overflow-y-auto"
           >
+            {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-3">
                 <span className="text-3xl">{inspectingStudent.avatar}</span>
                 <div className="flex flex-col">
                   <h3 className="text-lg font-black text-white">{inspectingStudent.name}</h3>
                   <span className="text-xs text-white/50">
-                    Lesson {inspectingStudent.currentLessonId} • {inspectingStudent.totalMinutesPracticed} Mins Total
+                    Lesson {inspectingStudent.currentLessonId} • {inspectingStudent.totalLessonsMastered || 0} Mastered • {inspectingStudent.totalMinutesPracticed} Mins Practiced
                   </span>
                 </div>
               </div>
@@ -312,114 +356,234 @@ export function TeacherDashboard({
               </button>
             </div>
 
-            {/* 9x9 Multiplication Mastery Heatmap Grid */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-black uppercase tracking-wider text-white/70">
-                  9×9 Multiplication Automaticity Heatmap
-                </span>
-                <div className="flex items-center gap-2 text-[10px] font-bold">
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded bg-emerald-400" /> Mastered
+            {/* Sub-tabs: Heatmap | Re-Drill Queue | Per-Fact Table */}
+            <div className="flex items-center gap-2 border-b border-white/10 pb-2">
+              <button
+                onClick={() => setStudentDetailTab("heatmap")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  studentDetailTab === "heatmap"
+                    ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                    : "text-white/60 hover:text-white"
+                }`}
+              >
+                9×9 Color-Blind Heatmap
+              </button>
+              <button
+                onClick={() => setStudentDetailTab("redrill")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  studentDetailTab === "redrill"
+                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                    : "text-white/60 hover:text-white"
+                }`}
+              >
+                <span>Re-Drill Queue</span>
+                {inspectingStudent.reDrillQueue && inspectingStudent.reDrillQueue.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full bg-rose-500 text-white text-[9px] font-black">
+                    {inspectingStudent.reDrillQueue.length}
                   </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded bg-amber-400" /> Progressing
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded bg-rose-500" /> Learning
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded bg-white/10" /> Unreached
-                  </span>
-                </div>
-              </div>
-
-              {/* Grid: 1..9 by 1..9 */}
-              <div className="grid grid-cols-10 gap-1 p-2 rounded-2xl bg-black/40 border border-white/10">
-                {/* Header corner */}
-                <div className="flex items-center justify-center text-[10px] font-black text-white/30">
-                  ×
-                </div>
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => (
-                  <div
-                    key={col}
-                    className="flex items-center justify-center text-[10px] font-black text-cyan-300"
-                  >
-                    {col}
-                  </div>
-                ))}
-
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
-                  <div key={row} className="contents">
-                    <div className="flex items-center justify-center text-[10px] font-black text-purple-300">
-                      {row}
-                    </div>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => {
-                      const key = `${row}x${col}`;
-                      const fact = inspectingStudent.factMastery[key];
-                      const status = fact?.status || "unreached";
-
-                      let bg = "bg-white/5 text-white/30";
-                      if (status === "mastered") bg = "bg-emerald-500 text-black font-black";
-                      else if (status === "progressing") bg = "bg-amber-400 text-black font-black";
-                      else if (status === "learning") bg = "bg-rose-500 text-white font-black";
-
-                      return (
-                        <div
-                          key={col}
-                          title={`${row} × ${col} = ${row * col} (${status})`}
-                          className={`h-7 rounded-md flex items-center justify-center text-[10px] transition-transform hover:scale-110 cursor-pointer shadow-sm ${bg}`}
-                        >
-                          {row * col}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+                )}
+              </button>
+              <button
+                onClick={() => setStudentDetailTab("facts")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  studentDetailTab === "facts"
+                    ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                    : "text-white/60 hover:text-white"
+                }`}
+              >
+                Per-Fact Accuracy History
+              </button>
             </div>
 
-            {/* Session History Log */}
-            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
-              <span className="text-xs font-black uppercase tracking-wider text-white/70">
-                Recent 5-Minute Lessons
-              </span>
-              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
-                {inspectingStudent.lessonHistory.length === 0 ? (
-                  <span className="text-xs text-white/40 italic">No lessons recorded yet.</span>
-                ) : (
-                  inspectingStudent.lessonHistory.map((h) => (
-                    <div
-                      key={h.id}
-                      className="p-2.5 rounded-xl bg-white/[0.02] border border-white/5 flex items-center justify-between text-xs"
-                    >
-                      <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="font-bold text-white">Lesson {h.lessonId}</span>
-                        <span className="text-[10px] text-white/40">
-                          {new Date(h.timestamp).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2.5">
-                        {h.checkoutPassed !== undefined && (
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              h.checkoutPassed
-                                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                                : "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                            }`}
+            {/* TAB 1: 9x9 COLOR-BLIND SAFE HEATMAP */}
+            {studentDetailTab === "heatmap" && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black uppercase tracking-wider text-white/70">
+                    9×9 Fact Grid with Explicit Glyphs
+                  </span>
+                  <div className="flex items-center gap-2 text-[10px] font-bold">
+                    <span className="flex items-center gap-1 text-emerald-300">
+                      <span className="w-2.5 h-2.5 rounded bg-emerald-500 text-black flex items-center justify-center text-[7px] font-black">✓</span> Mastered
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-300">
+                      <span className="w-2.5 h-2.5 rounded bg-amber-400 text-black flex items-center justify-center text-[7px] font-black">~</span> Progressing
+                    </span>
+                    <span className="flex items-center gap-1 text-rose-300">
+                      <span className="w-2.5 h-2.5 rounded bg-rose-500 text-white flex items-center justify-center text-[7px] font-black">!</span> Learning
+                    </span>
+                    <span className="flex items-center gap-1 text-white/40">
+                      <span className="w-2.5 h-2.5 rounded bg-white/10 text-white/40 flex items-center justify-center text-[7px]">·</span> Unreached
+                    </span>
+                  </div>
+                </div>
+
+                {/* Grid */}
+                <div className="grid grid-cols-10 gap-1 p-2 rounded-2xl bg-black/40 border border-white/10">
+                  <div className="flex items-center justify-center text-[10px] font-black text-white/30">×</div>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => (
+                    <div key={col} className="flex items-center justify-center text-[10px] font-black text-cyan-300">{col}</div>
+                  ))}
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((row) => (
+                    <div key={row} className="contents">
+                      <div className="flex items-center justify-center text-[10px] font-black text-purple-300">{row}</div>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((col) => {
+                        const key = `${row}x${col}`;
+                        const fact = inspectingStudent.factMastery[key];
+                        const status = fact?.status || "unreached";
+
+                        let bg = "bg-white/5 text-white/30 border border-white/5";
+                        let symbol = "·";
+                        if (status === "mastered") {
+                          bg = "bg-emerald-500 text-black font-black border border-emerald-400";
+                          symbol = "✓";
+                        } else if (status === "progressing") {
+                          bg = "bg-amber-400 text-black font-black border border-amber-300";
+                          symbol = "~";
+                        } else if (status === "learning") {
+                          bg = "bg-rose-500 text-white font-black border border-rose-400";
+                          symbol = "!";
+                        }
+
+                        return (
+                          <div
+                            key={col}
+                            title={`${row} × ${col} = ${row * col} (${status}) - First-Try: ${fact?.firstTryCorrect || 0}`}
+                            className={`h-7 rounded flex flex-col items-center justify-center text-[9px] leading-none shadow-sm ${bg}`}
                           >
-                            {h.checkoutPassed ? "✓ Verified" : "Needs Firming"}
-                          </span>
-                        )}
-                        <span className="text-cyan-300 font-bold">{h.accuracyPercent}% Accuracy</span>
-                        <span className="text-amber-400 font-bold">{"★".repeat(h.starsEarned)}</span>
-                      </div>
+                            <span className="font-bold">{row * col}</span>
+                            <span className="text-[7px] opacity-80">{symbol}</span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: RE-DRILL QUEUE */}
+            {studentDetailTab === "redrill" && (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-rose-300">
+                      "Try Again Soon" Re-Drill Queue
+                    </h4>
+                    <p className="text-[11px] text-white/60">
+                      Missed facts scheduled for re-presentation with full scaffold before new facts
+                    </p>
+                  </div>
+
+                  {inspectingStudent.reDrillQueue && inspectingStudent.reDrillQueue.length > 0 && (
+                    <button
+                      onClick={() => {
+                        onSelectStudentToPlay(inspectingStudent);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-500/20 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-black" />
+                      <span>Re-drill Now</span>
+                    </button>
+                  )}
+                </div>
+
+                {(!inspectingStudent.reDrillQueue || inspectingStudent.reDrillQueue.length === 0) ? (
+                  <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/5 text-center text-xs text-white/40">
+                    Re-drill queue is clean! All attempted facts have been mastered or answered correctly on first try.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                    {inspectingStudent.reDrillQueue.map((item) => (
+                      <div
+                        key={item.factKey}
+                        className="p-3 rounded-xl bg-rose-950/30 border border-rose-500/30 flex items-center justify-between text-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono font-black text-white text-sm">
+                            {item.a} × {item.b} = {item.a * item.b}
+                          </span>
+                          <span className="text-[10px] text-white/50">
+                            Missed: {new Date(item.missedAt).toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            removeFromReDrillQueue(inspectingStudent.id, item.a, item.b);
+                            refreshData();
+                          }}
+                          className="px-2 py-1 rounded bg-white/5 hover:bg-rose-500/20 text-white/40 hover:text-rose-300 text-[10px] font-bold cursor-pointer transition-colors"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
-            </div>
+            )}
+
+            {/* TAB 3: PER-FACT ACCURACY HISTORY TABLE */}
+            {studentDetailTab === "facts" && (
+              <div className="flex flex-col gap-3">
+                <span className="text-xs font-black uppercase tracking-wider text-white/70">
+                  Per-Fact Detailed History (First-Try vs Corrected)
+                </span>
+                <div className="max-h-64 overflow-y-auto border border-white/10 rounded-2xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="sticky top-0 bg-[#0f121d] border-b border-white/10 text-white/40 uppercase font-black tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-2 px-3">Fact</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">First-Try Correct</th>
+                        <th className="py-2 px-3">Corrected Answers</th>
+                        <th className="py-2 px-3">Total Attempts</th>
+                        <th className="py-2 px-3">Missed Dates</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {Object.values(inspectingStudent.factMastery)
+                        .filter((f) => f.attempts > 0 || f.status === "mastered")
+                        .map((rec) => (
+                          <tr key={rec.factKey} className="hover:bg-white/[0.02]">
+                            <td className="py-2 px-3 font-mono font-black text-white">
+                              {rec.a} × {rec.b} = {rec.product}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                                  rec.status === "mastered"
+                                    ? "bg-emerald-500/20 text-emerald-300"
+                                    : rec.status === "progressing"
+                                    ? "bg-amber-500/20 text-amber-300"
+                                    : "bg-rose-500/20 text-rose-300"
+                                }`}
+                              >
+                                {rec.status}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 font-mono text-emerald-400 font-bold">
+                              {rec.firstTryCorrect || 0}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-amber-400 font-bold">
+                              {rec.correctedCount || 0}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-white/60">
+                              {rec.attempts}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-[10px] text-white/40">
+                              {rec.missedDates && rec.missedDates.length > 0
+                                ? rec.missedDates.join(", ")
+                                : "None"}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       )}

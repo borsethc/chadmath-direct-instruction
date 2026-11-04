@@ -1,4 +1,4 @@
-import { DILesson } from "./types";
+import type { DILesson } from "./types.ts";
 
 export const DI_LESSONS: DILesson[] = [
   {

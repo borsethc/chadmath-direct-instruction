@@ -112,6 +112,7 @@ export default function Home() {
         {currentView === "lesson" && activeLesson && (
           <LessonEngine
             lesson={activeLesson}
+            student={activeStudent}
             onLessonComplete={handleLessonComplete}
             onExit={() => setCurrentView("dashboard")}
           />

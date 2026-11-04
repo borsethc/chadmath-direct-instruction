@@ -18,6 +18,9 @@ export interface FactMasteryRecord {
   consecutiveCorrect: number;
   status: "unreached" | "learning" | "progressing" | "mastered";
   lastPracticed: string;
+  firstTryCorrect?: number;
+  correctedCount?: number;
+  missedDates?: string[];
 }
 
 export interface LessonStep {
@@ -67,12 +70,15 @@ export interface StudentProfile {
   pin?: string;
   currentLessonId: number;
   totalMinutesPracticed: number;
-  totalLessonsCompleted: number;
+  totalLessonsCompleted: number; // Attempted / Practised sessions
+  totalLessonsMastered: number;  // Only lessons whose gate passed!
   streakDays: number;
+  lastPracticeDateChicago?: string; // YYYY-MM-DD in America/Chicago
   xp: number;
   lastActive: string;
   factMastery: Record<string, FactMasteryRecord>; // "AxB" -> Record
   lessonHistory: LessonAttempt[];
+  reDrillQueue: { factKey: string; a: number; b: number; missedAt: string }[];
 }
 
 export interface TeacherAnalytics {
@@ -82,4 +88,6 @@ export interface TeacherAnalytics {
   classAverageAccuracy: number; // 0..100
   totalMinutesLogged: number;
   strugglingFacts: { factKey: string; errorCount: number; affectedStudentsCount: number }[];
+  accuracyFormula: string;
 }
+
