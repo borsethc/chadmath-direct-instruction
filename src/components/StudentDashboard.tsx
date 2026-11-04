@@ -35,11 +35,18 @@ export function StudentDashboard({
   onOpenTeacherPortal,
   onSwitchStudent,
 }: StudentDashboardProps) {
-  // Current recommended lesson
-  const currentLesson = DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];
+  const isAllLessonsComplete =
+    (student.totalLessonsMastered || 0) >= 11 || (student.currentLessonId || 1) > 11;
+
+  // Current recommended lesson (when all complete, default to Lesson 11 mixed sprint for maintenance)
+  const currentLesson = isAllLessonsComplete
+    ? DI_LESSONS[10]
+    : DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];
+
   const [selectedFactInfo, setSelectedFactInfo] = useState<{ a: number; b: number; status: string } | null>(null);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState<"normal" | "large">("normal");
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   // Calculate overall facts mastered (out of 81)
   const masteredCount = Object.values(student.factMastery).filter(
@@ -54,8 +61,13 @@ export function StudentDashboard({
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
       utterance.pitch = 1.0;
+      utterance.onstart = () => setIsPlayingAudio(true);
+      utterance.onend = () => setIsPlayingAudio(false);
+      utterance.onerror = () => setIsPlayingAudio(false);
       window.speechSynthesis.speak(utterance);
-    } catch {}
+    } catch {
+      setIsPlayingAudio(false);
+    }
   };
 
   return (
@@ -75,22 +87,35 @@ export function StudentDashboard({
         )}
       </AnimatePresence>
 
-      {/* HERO SECTION: TODAY'S 5-MINUTE DIRECT INSTRUCTION LESSON */}
+      {/* HERO SECTION: TODAY'S 5-MINUTE DIRECT INSTRUCTION LESSON / ALL-COMPLETE CELEBRATION */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full rounded-3xl bg-gradient-to-br from-[#121728] via-[#0b0e1a] to-[#141226] border-2 border-cyan-500/30 p-5 sm:p-8 backdrop-blur-3xl shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6"
+        className={`w-full rounded-3xl border-2 p-5 sm:p-8 backdrop-blur-3xl shadow-2xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 ${
+          isAllLessonsComplete
+            ? "bg-gradient-to-br from-[#13221c] via-[#0b1418] to-[#1a1c30] border-emerald-400/50 shadow-[0_0_40px_rgba(16,185,129,0.2)]"
+            : "bg-gradient-to-br from-[#121728] via-[#0b0e1a] to-[#141226] border-cyan-500/30"
+        }`}
       >
         {/* Glow orb */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className={`absolute top-0 right-0 w-80 h-80 rounded-full blur-3xl pointer-events-none ${
+          isAllLessonsComplete ? "bg-emerald-500/15" : "bg-cyan-500/10"
+        }`} />
 
         <div className="flex-1 flex flex-col gap-3 relative z-10 w-full">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                <span>Today&apos;s 5-Minute Lesson</span>
-              </span>
+              {isAllLessonsComplete ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <Award className="w-3 h-3 text-emerald-300" />
+                  <span>All 11 Lessons Mastered!</span>
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  <span>Today&apos;s 5-Minute Lesson</span>
+                </span>
+              )}
 
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
                 <Flame className="w-3 h-3 fill-current" />
@@ -101,11 +126,21 @@ export function StudentDashboard({
             {/* Accessibility: Read Aloud & Font Toggle */}
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => speakText(`${currentLesson.title}. ${currentLesson.ruleSummary}`)}
-                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer"
+                onClick={() =>
+                  speakText(
+                    isAllLessonsComplete
+                      ? "Congratulations! All 11 lessons complete. Practice the mixed retrieval sprint anytime to maintain automaticity."
+                      : `${currentLesson.title}. ${currentLesson.ruleSummary}`
+                  )
+                }
+                className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
+                  isPlayingAudio
+                    ? "bg-cyan-500/30 border-cyan-400 text-cyan-300 animate-pulse"
+                    : "bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white"
+                }`}
                 title="Read lesson summary aloud"
               >
-                <Volume2 className="w-4 h-4 text-cyan-400" />
+                <Volume2 className={`w-4 h-4 ${isPlayingAudio ? "text-cyan-300" : "text-cyan-400"}`} />
               </button>
               <button
                 onClick={() => setFontSize((prev) => (prev === "normal" ? "large" : "normal"))}
@@ -118,13 +153,15 @@ export function StudentDashboard({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-3xl sm:text-4xl">{currentLesson.icon}</span>
+            <span className="text-3xl sm:text-4xl">{isAllLessonsComplete ? "🏆" : currentLesson.icon}</span>
             <div className="flex flex-col">
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {currentLesson.title}
+                {isAllLessonsComplete ? "Direct Instruction Mastery Achieved!" : currentLesson.title}
               </h1>
               <span className="text-xs sm:text-sm text-cyan-300 font-semibold">
-                {currentLesson.subtitle}
+                {isAllLessonsComplete
+                  ? "All 11 sequential lessons mastered. Maintain fluency with mixed retrieval sprints."
+                  : currentLesson.subtitle}
               </span>
             </div>
           </div>
@@ -132,10 +169,14 @@ export function StudentDashboard({
           {/* Rule Breakdown Card */}
           <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col gap-1 text-xs">
             <span className="font-black text-amber-300 uppercase tracking-wider text-[10px]">
-              Direct Instruction Rule: {currentLesson.ruleName}
+              {isAllLessonsComplete
+                ? "Fluency Maintenance: Mixed Retrieval Sprint"
+                : `Direct Instruction Rule: ${currentLesson.ruleName}`}
             </span>
             <p className="text-white/80 font-medium leading-relaxed">
-              {currentLesson.ruleSummary}
+              {isAllLessonsComplete
+                ? "Maintain your automaticity! Mixed retrieval reinforces all learned strategy anchors without relying on single-strategy blocks. Target under 3.5 seconds per fact."
+                : currentLesson.ruleSummary}
             </p>
           </div>
         </div>
@@ -149,13 +190,28 @@ export function StudentDashboard({
               soundEffects.playKeyClick();
               onStartLesson(currentLesson);
             }}
-            className="w-full md:w-64 h-16 rounded-2xl bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 text-black font-black text-base uppercase tracking-wider flex items-center justify-center gap-2.5 shadow-[0_0_30px_rgba(6,182,212,0.4)] hover:shadow-[0_0_40px_rgba(6,182,212,0.6)] transition-all cursor-pointer"
+            className={`w-full md:w-64 h-16 rounded-2xl font-black text-base uppercase tracking-wider flex items-center justify-center gap-2.5 transition-all cursor-pointer ${
+              isAllLessonsComplete
+                ? "bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 text-black shadow-[0_0_30px_rgba(16,185,129,0.4)] hover:shadow-[0_0_40px_rgba(16,185,129,0.6)]"
+                : "bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 text-black shadow-[0_0_30px_rgba(6,182,212,0.4)] hover:shadow-[0_0_40px_rgba(6,182,212,0.6)]"
+            }`}
           >
-            <Play className="w-6 h-6 fill-black" />
-            <span>Start 5-Min Lesson</span>
+            {isAllLessonsComplete ? (
+              <>
+                <Zap className="w-6 h-6 fill-black" />
+                <span>Start Mixed Sprint</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-6 h-6 fill-black" />
+                <span>Start 5-Min Lesson</span>
+              </>
+            )}
           </motion.button>
           <span className="text-[11px] text-white/50 font-medium">
-            Phases: Warmup → Model → Guided → Fluency → Gate
+            {isAllLessonsComplete
+              ? "Speed automaticity: Target < 3.5s/fact"
+              : "Phases: Warmup → Model → Guided → Fluency → Gate"}
           </span>
         </div>
       </motion.div>
@@ -215,9 +271,12 @@ export function StudentDashboard({
 
           <div className="flex flex-col gap-2.5 max-h-[460px] overflow-y-auto pr-1">
             {DI_LESSONS.map((lesson) => {
-              const isCompleted = (student.totalLessonsMastered || 0) >= lesson.id || student.currentLessonId > lesson.id;
-              const isCurrent = student.currentLessonId === lesson.id;
-              const isLocked = student.currentLessonId < lesson.id;
+              const isCompleted =
+                isAllLessonsComplete ||
+                (student.totalLessonsMastered || 0) >= lesson.id ||
+                student.currentLessonId > lesson.id;
+              const isCurrent = !isAllLessonsComplete && student.currentLessonId === lesson.id;
+              const isLocked = !isAllLessonsComplete && student.currentLessonId < lesson.id;
 
               return (
                 <div
@@ -367,7 +426,7 @@ export function StudentDashboard({
                 </span>
               </div>
               <span className="text-cyan-300 font-semibold text-[11px]">
-                {selectedFactInfo.a} groups of {selectedFactInfo.b}
+                {selectedFactInfo.a} {selectedFactInfo.a === 1 ? "group" : "groups"} of {selectedFactInfo.b}
               </span>
             </div>
           ) : (

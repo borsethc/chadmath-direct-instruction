@@ -141,14 +141,11 @@ export function getLessonMasteryFacts(lessonId: number): { a: number; b: number 
       return [
         { a: 7, b: 8 }, { a: 8, b: 7 },
       ];
-    case 11: // Ultimate Mixed Speed Sprint
-      const all: { a: number; b: number }[] = [];
-      for (let a = 1; a <= 9; a++) {
-        for (let b = 1; b <= 9; b++) {
-          all.push({ a, b });
-        }
-      }
-      return all;
+    case 11: // Ultimate Mixed Speed Sprint (Mixed retrieval facts only, NEVER bulk 81!)
+      return [
+        { a: 6, b: 7 }, { a: 7, b: 8 }, { a: 8, b: 9 }, { a: 9, b: 6 },
+        { a: 4, b: 8 }, { a: 3, b: 9 }, { a: 7, b: 7 }, { a: 8, b: 8 },
+      ];
     default:
       return [];
   }
@@ -185,14 +182,23 @@ export function reconcileStudentMastery(student: StudentProfile): StudentProfile
     });
   }
 
-  // If student is on Lesson N > 1, all prior lessons 1..(N-1) were mastered
+  // If student reached lesson N, all prior lessons 1..(N-1) were mastered
   const currentLvl = student.currentLessonId || 1;
-  for (let l = 1; l < currentLvl; l++) {
+  const maxPrior = Math.min(11, currentLvl - 1);
+  for (let l = 1; l <= maxPrior; l++) {
     masteredLessonIds.add(l);
   }
 
-  // Also include any lessons recorded in totalLessonsMastered counter
-  for (let l = 1; l <= (student.totalLessonsMastered || 0); l++) {
+  // If Lesson 11 was passed or currentLessonId > 11, all 11 lessons are mastered!
+  if (currentLvl > 11 || masteredLessonIds.has(11)) {
+    for (let l = 1; l <= 11; l++) {
+      masteredLessonIds.add(l);
+    }
+  }
+
+  // Also include any lessons recorded in totalLessonsMastered counter (capped at 11)
+  const recordedMastered = Math.min(11, student.totalLessonsMastered || 0);
+  for (let l = 1; l <= recordedMastered; l++) {
     masteredLessonIds.add(l);
   }
 
@@ -229,10 +235,14 @@ export function reconcileStudentMastery(student: StudentProfile): StudentProfile
     });
   });
 
+  const totalMastered = Math.min(11, masteredLessonIds.size);
+  const isAllComplete = totalMastered === 11 || currentLvl > 11;
+
   return {
     ...student,
+    currentLessonId: isAllComplete ? 12 : currentLvl,
     factMastery,
-    totalLessonsMastered: Math.max(student.totalLessonsMastered || 0, masteredLessonIds.size),
+    totalLessonsMastered: totalMastered,
     totalLessonsCompleted: Math.max(student.totalLessonsCompleted || 0, student.lessonHistory?.length || 0),
     streakDays: student.streakDays || 0,
     reDrillQueue: student.reDrillQueue || [],
@@ -265,6 +275,15 @@ export function saveAllStudents(students: StudentProfile[]): void {
     storage.setItem(STORAGE_KEY, JSON.stringify(students));
   } catch (err) {
     console.error("Error saving students:", err);
+  }
+}
+
+export function revertStudentToSnapshot(snapshot: StudentProfile): void {
+  const students = loadAllStudents();
+  const idx = students.findIndex((s) => s.id === snapshot.id);
+  if (idx !== -1) {
+    students[idx] = JSON.parse(JSON.stringify(snapshot));
+    saveAllStudents(students);
   }
 }
 
@@ -514,9 +533,9 @@ export function recordLessonComplete(
   const isMastered = Boolean(attempt.checkoutPassed);
 
   if (isMastered) {
-    // 1. Advance to next lesson if currently on this lesson
+    // 1. Advance to next lesson if currently on this lesson (reaches 12 when L11 passes)
     if (student.currentLessonId === attempt.lessonId) {
-      student.currentLessonId = Math.min(11, student.currentLessonId + 1);
+      student.currentLessonId = attempt.lessonId + 1;
     }
 
     // 2. Mark this lesson's exact facts as mastered in the 9x9 fact grid

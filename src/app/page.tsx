@@ -142,7 +142,15 @@ export default function Home() {
             lesson={activeLesson}
             student={activeStudent}
             onLessonComplete={handleLessonComplete}
-            onExit={() => setCurrentView("dashboard")}
+            onExit={() => {
+              const loaded = loadAllStudents();
+              setStudents(loaded);
+              if (activeStudent) {
+                const refreshed = loaded.find((s) => s.id === activeStudent.id) || activeStudent;
+                setActiveStudent(refreshed);
+              }
+              setCurrentView("dashboard");
+            }}
           />
         )}
 

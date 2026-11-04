@@ -28,7 +28,7 @@ import {
 } from "./FormattedMath";
 import { soundEffects } from "@/lib/sounds";
 import { getDynamicRuleExplanation, DynamicRuleExplanation } from "@/lib/ruleEngine";
-import { recordFactAnswer, addToReDrillQueue } from "@/lib/storage";
+import { recordFactAnswer, addToReDrillQueue, revertStudentToSnapshot } from "@/lib/storage";
 
 interface LessonEngineProps {
   lesson: DILesson;
@@ -113,6 +113,7 @@ export function LessonEngine({
     averageLatencyMs: number;
     passed: boolean;
     speedGoalMet: boolean;
+    starsEarned: 1 | 2 | 3;
   } | null>(null);
 
   // P0: 400ms Second-Digit Pause & Double-Tap Pollution Cooldown Controls
@@ -122,6 +123,21 @@ export function LessonEngine({
   const cooldownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number>(Date.now());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // P0: Student Snapshot on Mount — ensures "Leave Without Saving" restores exact state
+  const initialStudentSnapshotRef = useRef<StudentProfile | null>(null);
+  useEffect(() => {
+    if (student && !initialStudentSnapshotRef.current) {
+      initialStudentSnapshotRef.current = JSON.parse(JSON.stringify(student));
+    }
+  }, [student]);
+
+  const handleConfirmDiscardAndExit = () => {
+    if (initialStudentSnapshotRef.current) {
+      revertStudentToSnapshot(initialStudentSnapshotRef.current);
+    }
+    onExit();
+  };
 
   // Initialize explanation on lesson load
   useEffect(() => {
@@ -235,12 +251,14 @@ export function LessonEngine({
   const startCheckoutGate = useCallback(() => {
     setPhase("checkout");
     setPhaseStepIndex(0);
+    // Shuffle targetFacts for random gate order on each attempt
+    const shuffled = [...lesson.targetFacts].sort(() => Math.random() - 0.5);
     const targets =
-      lesson.targetFacts.length >= 5
-        ? [...lesson.targetFacts].slice(0, 5)
+      shuffled.length >= 5
+        ? shuffled.slice(0, 5)
         : Array.from(
             { length: 5 },
-            (_, i) => lesson.targetFacts[i % lesson.targetFacts.length]
+            (_, i) => shuffled[i % shuffled.length]
           );
     setCheckoutFacts(targets);
     setCurrentFact(targets[0]);
@@ -342,6 +360,7 @@ export function LessonEngine({
 
           const isMastered = correctNum >= 4; // 4/5 or 5/5
           const speedMet = avgLatency <= 3500;
+          const stars: 1 | 2 | 3 = isMastered ? 3 : (correctNum / updatedResults.length) >= 0.75 ? 2 : 1;
 
           setCheckoutFinalScore({
             correct: correctNum,
@@ -349,6 +368,7 @@ export function LessonEngine({
             averageLatencyMs: avgLatency,
             passed: isMastered,
             speedGoalMet: speedMet,
+            starsEarned: stars,
           });
 
           if (isMastered) {
@@ -648,7 +668,7 @@ export function LessonEngine({
                   ? "Gate Transition"
                   : phase === "checkout"
                   ? "Checkout Gate"
-                  : "Complete"}
+                  : (checkoutFinalScore?.passed ? "Complete" : "Needs More Practice")}
               </span>
             </div>
           </div>
@@ -723,8 +743,17 @@ export function LessonEngine({
         {/* P0: PERSISTENT VISIBLE STRATEGY HEADER (Stays on every step of every lesson) */}
         <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
           <span className="truncate">
-            <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
-            {lesson.ruleName} — {lesson.ruleSummary}
+            {phase === "review" ? (
+              <>
+                <span className="text-amber-400 uppercase font-black tracking-wider text-[10px]">Warm-Up Review: </span>
+                {currentFactExpl ? currentFactExpl.ruleName : "Direct Retrieval"}
+              </>
+            ) : (
+              <>
+                <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
+                {lesson.ruleName} — {lesson.ruleSummary}
+              </>
+            )}
           </span>
         </div>
       </div>
@@ -810,8 +839,8 @@ export function LessonEngine({
             {/* Scaffold Visualizer */}
             <div className="w-full max-h-[120px] overflow-hidden">
               <FactVisualizer
-                factorA={currentFact.a}
-                factorB={currentFact.b}
+                factorA={checkExplanation.checkQuestionVisual?.a ?? currentFact.a}
+                factorB={checkExplanation.checkQuestionVisual?.b ?? currentFact.b}
                 showAnswer={false}
                 compact={true}
               />
@@ -849,7 +878,7 @@ export function LessonEngine({
                 Next: no groups shown. You are on your own for 5 problems.
               </p>
               <span className="text-[11px] text-amber-300 font-bold pt-1">
-                Accuracy Goal: 4+ out of 5 • Speed Target: under 3.5s per fact
+                Accuracy Goal: 4+ out of 5 (80%+) to pass • Speed Target: under 3.5s per fact (badge/label, not blocker)
               </span>
             </div>
 
@@ -882,8 +911,8 @@ export function LessonEngine({
                   <span className="text-xs text-white/60">Passed accuracy requirement with flying colors!</span>
                 </div>
 
-                {/* Score & Speed Badges */}
-                <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                {/* Score, Speed & XP Badges */}
+                <div className="grid grid-cols-3 gap-2 w-full pt-1">
                   <div className="p-2 rounded-xl bg-white/5 border border-white/10 flex flex-col">
                     <span className="text-lg font-black text-emerald-400">
                       {checkoutFinalScore.correct}/{checkoutFinalScore.total}
@@ -895,8 +924,14 @@ export function LessonEngine({
                       {(checkoutFinalScore.averageLatencyMs / 1000).toFixed(1)}s
                     </span>
                     <span className="text-[10px] text-white/50 font-bold uppercase">
-                      {checkoutFinalScore.speedGoalMet ? "⚡ Speed Target Met" : "Developing"}
+                      {checkoutFinalScore.speedGoalMet ? "⚡ Speed Target" : "Developing"}
                     </span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/30 flex flex-col">
+                    <span className="text-lg font-black text-purple-300">
+                      +{checkoutFinalScore.starsEarned * 50 + checkoutFinalScore.correct * 5 + 150}
+                    </span>
+                    <span className="text-[10px] text-white/50 font-bold uppercase">XP Earned</span>
                   </div>
                 </div>
 
@@ -935,6 +970,9 @@ export function LessonEngine({
                   <p className="text-xs text-white/70 leading-relaxed">
                     Score: {checkoutFinalScore?.correct || 0}/5. Direct instruction requires 4+ out of 5 to master this lesson.
                   </p>
+                  <span className="text-xs font-bold text-purple-300 pt-1">
+                    +{(checkoutFinalScore?.starsEarned || 1) * 20 + (checkoutFinalScore?.correct || 0) * 3} XP Earned
+                  </span>
                 </div>
 
                 <div className="flex flex-col gap-2 w-full pt-1">
@@ -958,6 +996,21 @@ export function LessonEngine({
         ) : (
           /* STANDARD LESSON DRILL: REVIEW (WARM-UP), GUIDED (WE DO), FLUENCY, OR CHECKOUT */
           <div className="w-full flex flex-col items-center gap-1.5 my-auto">
+            {/* In Checkout Gate, show explicit pass rule and label repeats */}
+            {phase === "checkout" && (
+              <div className="flex items-center justify-between w-full px-2 text-[10px] text-amber-300/90 font-bold">
+                <span>Pass Rule: 4+ of 5 correct (80%+)</span>
+                {checkoutFacts
+                  .slice(0, phaseStepIndex)
+                  .some((f) => f.a === currentFact.a && f.b === currentFact.b) && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px]">
+                    Repeat: {currentFact.a} × {currentFact.b} again
+                  </span>
+                )}
+                <span className="text-white/40">Target: &lt; 3.5s (badge)</span>
+              </div>
+            )}
+
             {/* In "We Do" (guided), pair the fact with strategy in headline banner */}
             {phase === "guided" && (
               <HeadlineMathFactBanner
@@ -1130,7 +1183,7 @@ export function LessonEngine({
                 Save Progress & Leave
               </button>
               <button
-                onClick={onExit}
+                onClick={handleConfirmDiscardAndExit}
                 className="w-full h-10 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold cursor-pointer"
               >
                 Leave Without Saving

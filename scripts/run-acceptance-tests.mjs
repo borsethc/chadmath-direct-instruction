@@ -294,6 +294,118 @@ assert(
   `Warm-up answer does not muddy grid: 3x4 status remains "unreached" instead of "learning" (current: ${studentAfterWarmup.factMastery["3x4"].status})`
 );
 
+// 12. Round 3 Acceptance Test: Lesson 9 Triple-Double Strategy (x8)
+const l9_7 = getDynamicRuleExplanation(9, 8, 7);
+assert(
+  l9_7.ruleName.includes("Triple-Double"),
+  `Lesson 9 ruleName teaches Triple-Double: "${l9_7.ruleName}"`
+);
+assert(
+  l9_7.strategyOverview.toLowerCase().includes("three times"),
+  `Lesson 9 teaches doubling three times: "${l9_7.strategyOverview}"`
+);
+assert(
+  !l9_7.strategyOverview.includes("5, 6, 7, 8") && !l9_7.strategyOverview.includes("5-6-7-8"),
+  `Lesson 9 has NO duplicate 5-6-7-8 rhyme material`
+);
+assert(
+  l9_7.contextLeadIn.includes("56") && !l9_7.contextLeadIn.includes("7 weeks"),
+  `Lesson 9 context lead-in does not say 7 weeks (says "${l9_7.contextLeadIn}")`
+);
+
+// 13. Round 3 Acceptance Test: Lesson 10 Distinct 5-6-7-8 Rhyme & Decomposition
+const l10_78 = getDynamicRuleExplanation(10, 7, 8);
+assert(
+  l10_78.strategyOverview.includes("5, 6, 7, 8") || l10_78.strategyOverview.includes("5-6-7-8"),
+  `Lesson 10 teaches 5-6-7-8 rhyme: "${l10_78.strategyOverview}"`
+);
+assert(
+  l10_78.steps.some((s) => s.math.includes("40") && s.math.includes("16")),
+  `Lesson 10 verifies with decomposition (40 + 16 = 56)`
+);
+
+// 14. Round 3 Acceptance Test: Lesson 11 Genuine Mixed Retrieval
+const l11_mixed = getDynamicRuleExplanation(11, 7, 8);
+assert(
+  l11_mixed.ruleName.includes("Mixed"),
+  `Lesson 11 is genuine Mixed Retrieval: "${l11_mixed.ruleName}"`
+);
+assert(
+  l11_mixed.strategyOverview.includes("mixes every fact") || l11_mixed.strategyOverview.includes("mixes all"),
+  `Lesson 11 overview explains it mixes facts without single-strategy block`
+);
+assert(
+  l11_mixed.steps.some((s) => s.label.includes("Recap")),
+  `Lesson 11 has Strategy Anchors Recap step`
+);
+
+// 15. Round 3 Acceptance Test: Lesson 11 Finish State & No Bulk 81 Marking
+const l11Facts = getLessonMasteryFacts(11);
+assert(
+  l11Facts.length <= 10,
+  `Lesson 11 only claims its target facts, never bulk 81 facts (length: ${l11Facts.length})`
+);
+
+const l11FinishingStudent = {
+  id: "test-l11-finish",
+  name: "Finisher",
+  avatar: "🚀",
+  currentLessonId: 11,
+  totalMinutesPracticed: 55,
+  totalLessonsCompleted: 10,
+  totalLessonsMastered: 10,
+  streakDays: 5,
+  lastPracticeDateChicago: todayChicago,
+  xp: 1500,
+  lastActive: new Date().toISOString(),
+  factMastery: generateEmptyFactMastery(),
+  lessonHistory: [],
+  reDrillQueue: [],
+};
+saveAllStudents([l11FinishingStudent]);
+
+const afterL11Pass = recordLessonComplete("test-l11-finish", {
+  lessonId: 11,
+  starsEarned: 3,
+  correctCount: 5,
+  totalQuestions: 5,
+  averageLatencyMs: 2500,
+  durationSeconds: 120,
+  accuracyPercentage: 100,
+  checkoutPassed: true,
+  speedGoalMet: true,
+});
+
+assert(
+  afterL11Pass.totalLessonsMastered === 11,
+  `Passing Lesson 11 sets totalLessonsMastered to 11/11: ${afterL11Pass.totalLessonsMastered}`
+);
+assert(
+  afterL11Pass.currentLessonId === 12,
+  `Passing Lesson 11 advances currentLessonId to 12 (celebration state, never left as CURRENT): ${afterL11Pass.currentLessonId}`
+);
+
+// 16. Round 3 Acceptance Test: Lessons 4 & 5 Intermediate Double Visual Matching
+const l4_3 = getDynamicRuleExplanation(4, 3, 3);
+assert(
+  l4_3.checkQuestionVisual && l4_3.checkQuestionVisual.a === 2 && l4_3.checkQuestionVisual.b === 3,
+  `Lesson 4 intermediate check question visual displays 2 groups of 3 for "3+3"`
+);
+const l5_4 = getDynamicRuleExplanation(5, 4, 4);
+assert(
+  l5_4.checkQuestionVisual && l5_4.checkQuestionVisual.a === 2 && l5_4.checkQuestionVisual.b === 4,
+  `Lesson 5 intermediate check question visual displays 2 groups of 4 for "4+4"`
+);
+
+// 17. Round 3 Acceptance Test: Gate distinct facts (5 distinct per lesson)
+for (const lesson of DI_LESSONS) {
+  const distinctTargets = new Set(lesson.targetFacts.map((f) => `${f.a}x${f.b}`));
+  assert(
+    distinctTargets.size >= 5,
+    `Lesson ${lesson.id} (${lesson.title}) has at least 5 distinct target facts for gate (count: ${distinctTargets.size})`
+  );
+}
+
 console.log("\n==========================================");
 if (testFailures === 0) {
   console.log("🎉 ALL ACCEPTANCE TESTS PASSED (0 failures)!");

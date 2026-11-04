@@ -30,8 +30,8 @@ for (let a = 1; a <= 9; a++) {
         `Fact ${a}×${b} (Lesson ${lessonId}): Conclusion "${exp.conclusion}" does not include correct product ${product}`
       );
 
-      // 2. Specific x2 doubling models verification
-      if ((a === 2 || b === 2) && exp.ruleName.includes("Double")) {
+      // 2. Specific x2 doubling models verification (Lesson 2)
+      if ((a === 2 || b === 2) && exp.ruleName === "The Double Rule (×2)") {
         const other = a === 2 ? b : a;
         if (other !== 2) {
           // Must NEVER double the 2 for problems other than 2x2
@@ -114,14 +114,22 @@ for (let a = 1; a <= 9; a++) {
         }
       }
 
-      // 5. Repeated addition line verification
+      // 5. Repeated addition & strategy representation line verification
       if (exp.repeatedAddition && exp.repeatedAddition !== "0") {
-        const parts = exp.repeatedAddition.split("+").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
-        const sumOfParts = parts.reduce((acc, val) => acc + val, 0);
-        assert(
-          sumOfParts === product,
-          `Fact ${a}×${b}: Repeated addition "${exp.repeatedAddition}" sums to ${sumOfParts}, expected ${product}`
-        );
+        if (/^[\d\s+]+$/.test(exp.repeatedAddition.trim())) {
+          const parts = exp.repeatedAddition.split("+").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
+          const sumOfParts = parts.reduce((acc, val) => acc + val, 0);
+          assert(
+            sumOfParts === product,
+            `Fact ${a}×${b}: Repeated addition "${exp.repeatedAddition}" sums to ${sumOfParts}, expected ${product}`
+          );
+        } else {
+          // If it's a rich strategy split (e.g. 14 + 7 = 21 or Triple-Double: 7 → 14 → 28 → 56), verify product is included
+          assert(
+            exp.repeatedAddition.includes(String(product)),
+            `Fact ${a}×${b}: Strategy representation "${exp.repeatedAddition}" must reference product ${product}`
+          );
+        }
       }
     }
   }
