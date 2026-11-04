@@ -107,6 +107,8 @@ global.localStorage = {
   setItem(k, v) { this.store[k] = String(v); },
   removeItem(k) { delete this.store[k]; },
 };
+
+assert(loadAllStudents().length === 0, `Empty storage returns 0 students for new users (current: ${loadAllStudents().length})`);
 saveAllStudents([testStudent]);
 
 // Failed gate should NOT increment totalLessonsMastered or mark facts mastered

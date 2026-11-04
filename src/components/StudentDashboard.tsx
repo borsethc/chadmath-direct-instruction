@@ -25,13 +25,11 @@ import { soundEffects } from "@/lib/sounds";
 interface StudentDashboardProps {
   student: StudentProfile;
   onStartLesson: (lesson: DILesson) => void;
-  onOpenTeacher: () => void;
 }
 
 export function StudentDashboard({
   student,
   onStartLesson,
-  onOpenTeacher,
 }: StudentDashboardProps) {
   // Current recommended lesson
   const currentLesson = DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];

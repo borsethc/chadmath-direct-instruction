@@ -5,14 +5,12 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLogin } from "@/components/StudentLogin";
 import { StudentDashboard } from "@/components/StudentDashboard";
 import { LessonEngine } from "@/components/LessonEngine";
-import { TeacherDashboard } from "@/components/TeacherDashboard";
 import { Confetti } from "@/components/Confetti";
 import { StudentProfile, DILesson, LessonAttempt } from "@/lib/types";
 import {
   loadAllStudents,
   getActiveStudentId,
   setActiveStudentId,
-  getStudentById,
   recordLessonComplete,
 } from "@/lib/storage";
 import { DI_LESSONS } from "@/lib/lessons";
@@ -20,7 +18,7 @@ import { DI_LESSONS } from "@/lib/lessons";
 export default function Home() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [activeStudent, setActiveStudent] = useState<StudentProfile | null>(null);
-  const [currentView, setCurrentView] = useState<"dashboard" | "lesson" | "login" | "teacher">("dashboard");
+  const [currentView, setCurrentView] = useState<"dashboard" | "lesson" | "login">("login");
   const [activeLesson, setActiveLesson] = useState<DILesson | null>(null);
   const [confettiTrigger, setConfettiTrigger] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -31,22 +29,30 @@ export default function Home() {
     setStudents(loadedStudents);
 
     const savedId = getActiveStudentId();
-    const current = loadedStudents.find((s) => s.id === savedId) || loadedStudents[0] || null;
+    const current = loadedStudents.find((s) => s.id === savedId) || (loadedStudents.length > 0 ? loadedStudents[0] : null);
     setActiveStudent(current);
+
+    // If no students exist or no active profile, force login view so first-time users create username immediately
+    if (loadedStudents.length === 0 || !current) {
+      setCurrentView("login");
+    } else {
+      setCurrentView("dashboard");
+    }
     setIsLoaded(true);
   }, []);
 
   const handleSelectStudent = (student: StudentProfile) => {
     setActiveStudent(student);
     setActiveStudentId(student.id);
+    setStudents(loadAllStudents());
     setCurrentView("dashboard");
   };
 
   const handleGuestStart = () => {
-    // Pick first demo student or Leo
-    const guest = students[0];
-    if (guest) {
-      handleSelectStudent(guest);
+    if (students.length > 0) {
+      handleSelectStudent(students[0]);
+    } else {
+      setCurrentView("login");
     }
   };
 
@@ -81,10 +87,17 @@ export default function Home() {
       {/* Top Navbar */}
       <Navbar
         currentStudent={activeStudent}
-        onOpenTeacherDashboard={() => setCurrentView("teacher")}
-        onSwitchStudent={() => setCurrentView("login")}
-        onGoHome={() => setCurrentView("dashboard")}
-        isTeacherView={currentView === "teacher"}
+        onSwitchStudent={() => {
+          setStudents(loadAllStudents());
+          setCurrentView("login");
+        }}
+        onGoHome={() => {
+          if (activeStudent) {
+            setCurrentView("dashboard");
+          } else {
+            setCurrentView("login");
+          }
+        }}
       />
 
       {/* Confetti celebration for lesson mastery */}
@@ -97,7 +110,6 @@ export default function Home() {
             students={students}
             onSelectStudent={handleSelectStudent}
             onGuestStart={handleGuestStart}
-            onOpenTeacher={() => setCurrentView("teacher")}
           />
         )}
 
@@ -105,7 +117,6 @@ export default function Home() {
           <StudentDashboard
             student={activeStudent}
             onStartLesson={handleStartLesson}
-            onOpenTeacher={() => setCurrentView("teacher")}
           />
         )}
 
@@ -115,17 +126,6 @@ export default function Home() {
             student={activeStudent}
             onLessonComplete={handleLessonComplete}
             onExit={() => setCurrentView("dashboard")}
-          />
-        )}
-
-        {currentView === "teacher" && (
-          <TeacherDashboard
-            onBackToApp={() => setCurrentView("dashboard")}
-            onSelectStudentToPlay={(student) => {
-              handleSelectStudent(student);
-              const lesson = DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];
-              handleStartLesson(lesson);
-            }}
           />
         )}
       </main>

@@ -175,16 +175,14 @@ const SEED_STUDENTS: StudentProfile[] = [
 
 export function loadAllStudents(): StudentProfile[] {
   const storage = getStorage();
-  if (!storage) return SEED_STUDENTS;
+  if (!storage) return [];
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
-      storage.setItem(STORAGE_KEY, JSON.stringify(SEED_STUDENTS));
-      return SEED_STUDENTS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      // Ensure all fields exist
+    if (Array.isArray(parsed)) {
       return parsed.map((s) => ({
         ...s,
         totalLessonsMastered: s.totalLessonsMastered ?? 0,
@@ -194,9 +192,9 @@ export function loadAllStudents(): StudentProfile[] {
         factMastery: s.factMastery ?? generateEmptyFactMastery(),
       }));
     }
-    return SEED_STUDENTS;
+    return [];
   } catch {
-    return SEED_STUDENTS;
+    return [];
   }
 }
 
@@ -212,8 +210,8 @@ export function saveAllStudents(students: StudentProfile[]): void {
 
 export function getActiveStudentId(): string {
   const storage = getStorage();
-  if (!storage) return "student-1";
-  return storage.getItem(ACTIVE_STUDENT_KEY) || "student-1";
+  if (!storage) return "";
+  return storage.getItem(ACTIVE_STUDENT_KEY) || "";
 }
 
 export function setActiveStudentId(id: string): void {

@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Sparkles, ArrowRight, Lightbulb } from "lucide-react";
 import { getDynamicRuleExplanation } from "@/lib/ruleEngine";
+import { FormattedEquation } from "./FormattedMath";
 
 interface DynamicRuleCardProps {
   lessonId: number;
@@ -46,12 +47,23 @@ export function DynamicRuleCard({
               <span className="w-4 h-4 rounded-full bg-amber-400 text-black text-[9px] font-black flex items-center justify-center shrink-0">
                 {step.stepNumber}
               </span>
-              <span>{step.math}</span>
+              <FormattedEquation
+                mathString={step.math}
+                factorA={factorA}
+                factorB={factorB}
+                size="sm"
+              />
             </div>
           ))}
 
-          <span className="text-emerald-400 font-mono font-black text-xs ml-auto">
-            👉 {explanation.conclusion}
+          <span className="text-emerald-400 font-mono font-black text-xs ml-auto inline-flex items-center gap-1">
+            <span>👉</span>
+            <FormattedEquation
+              mathString={explanation.conclusion}
+              factorA={factorA}
+              factorB={factorB}
+              size="sm"
+            />
           </span>
         </div>
       </div>
@@ -97,9 +109,12 @@ export function DynamicRuleCard({
               </span>
             </div>
 
-            <span className="font-mono font-black text-xs sm:text-sm text-cyan-300">
-              {step.math}
-            </span>
+            <FormattedEquation
+              mathString={step.math}
+              factorA={factorA}
+              factorB={factorB}
+              size="md"
+            />
           </div>
         ))}
       </div>
@@ -107,8 +122,14 @@ export function DynamicRuleCard({
       {/* Final Punchy Conclusion */}
       <div className="pt-2 border-t border-purple-500/20 flex items-center justify-between text-xs sm:text-sm">
         <span className="text-white/60 font-semibold">Answer:</span>
-        <span className="font-mono font-black text-emerald-400 text-base sm:text-lg bg-emerald-950/50 px-3 py-0.5 rounded-lg border border-emerald-500/30">
-          👉 {explanation.conclusion}
+        <span className="font-mono font-black text-emerald-400 text-base sm:text-lg bg-emerald-950/50 px-3 py-1 rounded-lg border border-emerald-500/30 inline-flex items-center gap-1.5">
+          <span>👉</span>
+          <FormattedEquation
+            mathString={explanation.conclusion}
+            factorA={factorA}
+            factorB={factorB}
+            size="lg"
+          />
         </span>
       </div>
     </motion.div>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { UserPlus, Sparkles, ArrowRight, Check, Play } from "lucide-react";
+import { UserPlus, Sparkles, ArrowRight, Play } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
 import { createNewStudent } from "@/lib/storage";
 import { soundEffects } from "@/lib/sounds";
@@ -11,7 +11,6 @@ interface StudentLoginProps {
   students: StudentProfile[];
   onSelectStudent: (student: StudentProfile) => void;
   onGuestStart: () => void;
-  onOpenTeacher: () => void;
 }
 
 const AVATAR_OPTIONS = ["🦁", "🐬", "🚀", "🦄", "⚡", "🦊", "🐯", "🐼", "🐲", "🌟"];
@@ -20,9 +19,9 @@ export function StudentLogin({
   students,
   onSelectStudent,
   onGuestStart,
-  onOpenTeacher,
 }: StudentLoginProps) {
-  const [isAddingNew, setIsAddingNew] = useState(false);
+  const isFirstTime = students.length === 0;
+  const [isAddingNew, setIsAddingNew] = useState(isFirstTime);
   const [newName, setNewName] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_OPTIONS[0]);
 
@@ -49,16 +48,18 @@ export function StudentLogin({
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-            Who is Learning Today?
+            {isFirstTime ? "Welcome to ChadMath!" : "Who is Learning Today?"}
           </h1>
 
           <p className="text-sm text-white/60 max-w-md">
-            Pick your profile to continue your daily 5-minute mastery lesson, or create a new student account.
+            {isFirstTime
+              ? "Create your username below to begin your daily 5-minute multiplication mastery journey."
+              : "Pick your profile to continue your daily 5-minute mastery lesson, or create a new student account."}
           </p>
         </div>
 
-        {/* Existing Student Profiles Roster */}
-        {!isAddingNew ? (
+        {/* Existing Student Profiles Roster (Only if profiles exist and not adding new) */}
+        {!isAddingNew && students.length > 0 ? (
           <div className="w-full rounded-3xl bg-white/[0.03] border border-white/10 p-5 sm:p-6 backdrop-blur-2xl shadow-2xl flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-black uppercase tracking-wider text-white/50">
@@ -116,8 +117,8 @@ export function StudentLogin({
               })}
             </div>
 
-            {/* Quick Action Buttons */}
-            <div className="pt-2 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Quick Action Button for returning users */}
+            <div className="pt-2 border-t border-white/5 flex items-center justify-start">
               <button
                 onClick={onGuestStart}
                 className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -125,40 +126,44 @@ export function StudentLogin({
                 <Play className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Instant Demo / Guest Mode</span>
               </button>
-
-              <button
-                onClick={onOpenTeacher}
-                className="text-xs text-amber-400/80 hover:text-amber-300 font-bold transition-colors cursor-pointer"
-              >
-                Teacher Portal (PIN: 9999) →
-              </button>
             </div>
           </div>
         ) : (
-          /* Add New Student Form */
+          /* Create Username Form (First-time user or adding new) */
           <motion.form
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             onSubmit={handleCreateStudent}
-            className="w-full rounded-3xl bg-white/[0.03] border border-white/10 p-6 backdrop-blur-2xl shadow-2xl flex flex-col gap-4"
+            className="w-full rounded-3xl bg-white/[0.03] border border-white/10 p-6 backdrop-blur-2xl shadow-2xl flex flex-col gap-5"
           >
-            <h2 className="text-lg font-black text-white">Create New Student Profile</h2>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-black text-white">
+                {isFirstTime ? "Create Your Username" : "Add New Student Profile"}
+              </h2>
+              <p className="text-xs text-white/50">
+                Choose a username to track your levels, badges, and 5-minute daily practice.
+              </p>
+            </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-white/60">Student Name</label>
+              <label className="text-xs font-bold text-white/70 uppercase tracking-wider">
+                Username
+              </label>
               <input
                 type="text"
                 required
                 autoFocus
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g. Jordan Smith"
-                className="w-full h-12 rounded-xl bg-black/50 border border-white/15 px-4 text-white font-bold outline-none focus:border-cyan-400 transition-colors"
+                placeholder="e.g. Jordan"
+                className="w-full h-12 rounded-xl bg-black/60 border border-white/20 px-4 text-white font-bold text-lg outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20 transition-all placeholder:text-white/30"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-white/60">Choose Avatar</label>
+              <label className="text-xs font-bold text-white/70 uppercase tracking-wider">
+                Choose Avatar
+              </label>
               <div className="flex items-center gap-2 flex-wrap">
                 {AVATAR_OPTIONS.map((av) => (
                   <button
@@ -177,19 +182,22 @@ export function StudentLogin({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 pt-3">
-              <button
-                type="button"
-                onClick={() => setIsAddingNew(false)}
-                className="flex-1 h-11 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold cursor-pointer"
-              >
-                Cancel
-              </button>
+            <div className="flex items-center gap-3 pt-2">
+              {!isFirstTime && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNew(false)}
+                  className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-xs font-bold cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 type="submit"
-                className="flex-1 h-11 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-400 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-cyan-500/20 cursor-pointer"
+                className="flex-1 h-12 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-400 text-black text-xs font-black uppercase tracking-wider shadow-lg shadow-cyan-500/20 cursor-pointer hover:opacity-95 transition-all flex items-center justify-center gap-2"
               >
-                Create & Begin
+                <span>Start Learning</span>
+                <ArrowRight className="w-4 h-4 stroke-[3]" />
               </button>
             </div>
           </motion.form>

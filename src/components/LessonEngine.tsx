@@ -28,6 +28,7 @@ import { DILesson, MathFact, DIPhase, LessonAttempt, StudentProfile } from "@/li
 import { Numpad } from "./Numpad";
 import { FactVisualizer } from "./FactVisualizer";
 import { DynamicRuleCard } from "./DynamicRuleCard";
+import { FormattedMathFact, FormattedEquation, HighlightedStrategyText } from "./FormattedMath";
 import { soundEffects } from "@/lib/sounds";
 import { getDynamicRuleExplanation, DynamicRuleExplanation } from "@/lib/ruleEngine";
 import { recordFactAnswer, addToReDrillQueue } from "@/lib/storage";
@@ -750,15 +751,28 @@ export function LessonEngine({
             animate={{ opacity: 1, y: 0 }}
             className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/60 border border-white/15 p-4 flex flex-col gap-3 text-left overflow-y-auto max-h-[520px]"
           >
-            <div className="flex items-center gap-2 border-b border-white/10 pb-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-black text-white">{checkExplanation.ruleName}</h2>
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                <h2 className="text-sm font-black text-white">{checkExplanation.ruleName}</h2>
+              </div>
+              <FormattedMathFact
+                a={currentFact.a}
+                b={currentFact.b}
+                product={currentFact.product}
+                size="md"
+              />
             </div>
 
-            {/* Strategy Overview Paragraph */}
-            <p className="text-xs sm:text-sm text-white/90 leading-relaxed font-medium">
-              {checkExplanation.strategyOverview}
-            </p>
+            {/* Strategy Overview Paragraph with Bigger, Bolder Colors */}
+            <div className="text-xs sm:text-sm text-white/90 leading-relaxed font-medium">
+              <HighlightedStrategyText
+                text={checkExplanation.strategyOverview}
+                factorA={currentFact.a}
+                factorB={currentFact.b}
+                product={currentFact.product}
+              />
+            </div>
 
             {/* Older-child Context Lead-In */}
             <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
@@ -779,7 +793,12 @@ export function LessonEngine({
                   <span className="font-bold text-white/80">
                     Step {st.stepNumber}: {st.label}
                   </span>
-                  <span className="font-mono font-black text-cyan-300">{st.math}</span>
+                  <FormattedEquation
+                    mathString={st.math}
+                    factorA={currentFact.a}
+                    factorB={currentFact.b}
+                    size="md"
+                  />
                 </div>
               ))}
             </div>
@@ -973,13 +992,13 @@ export function LessonEngine({
               </div>
             )}
 
-            {/* Math Problem Numerals */}
+            {/* Math Problem Numerals with Color Reinforcement */}
             <div className="flex items-center justify-center gap-2 sm:gap-3 my-0.5">
-              <span className={`font-black text-white font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`}>
+              <span className={`font-black text-cyan-400 font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`} title="Number of groups">
                 {currentFact.a}
               </span>
               <span className="text-2xl sm:text-3xl font-black text-white/40">×</span>
-              <span className={`font-black text-white font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`}>
+              <span className={`font-black text-purple-300 font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`} title="Items per group">
                 {currentFact.b}
               </span>
               <span className="text-2xl sm:text-3xl font-black text-white/40">=</span>
