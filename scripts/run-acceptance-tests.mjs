@@ -199,6 +199,101 @@ assert(
   `Active student ID is remembered from cookie`
 );
 
+// 9. Round 2 Acceptance Test: Streak preservation on save
+const streakStudent = {
+  id: "test-streak-student",
+  name: "Streak Tester",
+  avatar: "🔥",
+  currentLessonId: 2,
+  totalMinutesPracticed: 10,
+  totalLessonsCompleted: 3,
+  totalLessonsMastered: 1,
+  streakDays: 3, // prior 3-day streak
+  lastPracticeDateChicago: "", // missing prior chicago date
+  xp: 150,
+  lastActive: new Date().toISOString(),
+  factMastery: generateEmptyFactMastery(),
+  lessonHistory: [],
+  reDrillQueue: [],
+};
+saveAllStudents([streakStudent]);
+// First save after round 1
+recordFactAnswer("test-streak-student", 2, 3, "first-try", true, 1200);
+let savedStudent = loadAllStudents().find((s) => s.id === "test-streak-student");
+assert(
+  savedStudent.streakDays >= 3,
+  `Prior 3-day streak is preserved on save instead of resetting to 1 (current: ${savedStudent.streakDays}d)`
+);
+
+// 10. Round 2 Acceptance Test: Prior Mastery Backfill / Reconciliation
+// Suppose roadmap / currentLesson indicates Lesson 1 was mastered earlier but totalLessonsMastered was 0 or out of sync
+const unreconciledStudent = {
+  id: "test-reconcile-student",
+  name: "Reconcile Tester",
+  avatar: "🚀",
+  currentLessonId: 4, // Student reached Lesson 4, meaning Lessons 1, 2, 3 were completed/mastered
+  totalMinutesPracticed: 25,
+  totalLessonsCompleted: 5,
+  totalLessonsMastered: 2, // Desynchronized: was 2/11 instead of 3
+  streakDays: 2,
+  lastPracticeDateChicago: todayChicago,
+  xp: 300,
+  lastActive: new Date().toISOString(),
+  factMastery: generateEmptyFactMastery(),
+  lessonHistory: [
+    { lessonId: 1, checkoutPassed: true, durationSeconds: 200, accuracyPercent: 90, totalQuestions: 10, correctCount: 9, errorFacts: [], starsEarned: 3 },
+    { lessonId: 2, checkoutPassed: true, durationSeconds: 200, accuracyPercent: 90, totalQuestions: 10, correctCount: 9, errorFacts: [], starsEarned: 3 },
+    { lessonId: 3, checkoutPassed: true, durationSeconds: 200, accuracyPercent: 90, totalQuestions: 10, correctCount: 9, errorFacts: [], starsEarned: 3 },
+  ],
+  reDrillQueue: [],
+};
+saveAllStudents([unreconciledStudent]);
+// On loadAllStudents(), reconcileStudentMastery automatically backfills
+const reconciled = loadAllStudents().find((s) => s.id === "test-reconcile-student");
+assert(
+  reconciled.totalLessonsMastered === 3,
+  `Prior mastery reconciled: Lessons Mastered counter matches roadmap: 3/11 (current: ${reconciled.totalLessonsMastered})`
+);
+const factsFrom3Lessons =
+  getLessonMasteryFacts(1).length +
+  getLessonMasteryFacts(2).length +
+  getLessonMasteryFacts(3).length;
+const actualMasteredFacts = Object.values(reconciled.factMastery).filter((f) => f.status === "mastered").length;
+assert(
+  actualMasteredFacts === factsFrom3Lessons,
+  `Reconciled student has all facts from mastered lessons marked mastered: ${actualMasteredFacts}/${factsFrom3Lessons}`
+);
+
+// 11. Round 2 Acceptance Test: Grid muddying prevention during warm-up
+// In Lesson 2, warm-up asks 1 x 6 (belonging to Lesson 1). It must NOT mark 1x6 as "learning" or "progressing"
+const freshStudent = {
+  id: "test-grid-student",
+  name: "Grid Tester",
+  avatar: "🐬",
+  currentLessonId: 2,
+  totalMinutesPracticed: 5,
+  totalLessonsCompleted: 1,
+  totalLessonsMastered: 0,
+  streakDays: 1,
+  lastPracticeDateChicago: todayChicago,
+  xp: 50,
+  lastActive: new Date().toISOString(),
+  factMastery: generateEmptyFactMastery(),
+  lessonHistory: [],
+  reDrillQueue: [],
+};
+saveAllStudents([freshStudent]);
+// Simulate answering warm-up item 3x4 with isWarmUp: true
+recordFactAnswer("test-grid-student", 3, 4, "first-try", true, 1100, {
+  isWarmUp: true,
+  currentLessonId: 2,
+});
+const studentAfterWarmup = loadAllStudents().find((s) => s.id === "test-grid-student");
+assert(
+  studentAfterWarmup.factMastery["3x4"].status === "unreached",
+  `Warm-up answer does not muddy grid: 3x4 status remains "unreached" instead of "learning" (current: ${studentAfterWarmup.factMastery["3x4"].status})`
+);
+
 console.log("\n==========================================");
 if (testFailures === 0) {
   console.log("🎉 ALL ACCEPTANCE TESTS PASSED (0 failures)!");

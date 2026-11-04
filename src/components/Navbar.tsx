@@ -1,16 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Volume2, VolumeX, Flame } from "lucide-react";
+import { Volume2, VolumeX, Flame, GraduationCap } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
 import { soundEffects } from "@/lib/sounds";
 
 interface NavbarProps {
   currentStudent: StudentProfile | null;
   onGoHome: () => void;
+  onOpenTeacherPortal?: () => void;
+  onSwitchStudent?: () => void;
 }
 
-export function Navbar({ currentStudent, onGoHome }: NavbarProps) {
+export function Navbar({
+  currentStudent,
+  onGoHome,
+  onOpenTeacherPortal,
+  onSwitchStudent,
+}: NavbarProps) {
   const [isMuted, setIsMuted] = useState(!soundEffects.enabled);
 
   const toggleSound = () => {
@@ -45,14 +52,14 @@ export function Navbar({ currentStudent, onGoHome }: NavbarProps) {
         </div>
       </div>
 
-      {/* Controls: Active User Badge & Sound Toggle */}
+      {/* Controls: Active User Badge, Teacher Portal & Sound Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Active User Badge (Informational) */}
+        {/* Active User Badge (Informational / Switch Profile) */}
         {currentStudent && (
           <div
-            onClick={onGoHome}
+            onClick={onSwitchStudent || onGoHome}
             className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 select-none cursor-pointer hover:bg-white/[0.08] transition-all"
-            title="Go to dashboard"
+            title="Click to switch profile"
           >
             <span className="text-base sm:text-lg">{currentStudent.avatar}</span>
             <div className="flex flex-col text-left">
@@ -70,6 +77,18 @@ export function Navbar({ currentStudent, onGoHome }: NavbarProps) {
               <span>{currentStudent.streakDays || 0}d</span>
             </div>
           </div>
+        )}
+
+        {/* Teacher Portal Button (Always present and reachable for the owner) */}
+        {onOpenTeacherPortal && (
+          <button
+            onClick={onOpenTeacherPortal}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/80 hover:text-white border border-white/10 hover:border-amber-500/40 text-xs font-black transition-all cursor-pointer touch-manipulation shrink-0"
+            title="View Teacher Portal"
+          >
+            <GraduationCap className="w-4 h-4 text-amber-400" />
+            <span className="hidden xs:inline">Teacher</span>
+          </button>
         )}
 
         {/* Sound Toggle */}

@@ -9,26 +9,23 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRight,
-  ArrowLeft,
   RotateCcw,
   Volume2,
-  Star,
-  Brain,
-  Trophy,
   Target,
-  Zap,
-  HelpCircle,
   Play,
   Pause,
-  Layers,
-  LayoutGrid,
   Type,
+  HelpCircle,
 } from "lucide-react";
-import { DILesson, MathFact, DIPhase, LessonAttempt, StudentProfile } from "@/lib/types";
+import { DILesson, MathFact, LessonAttempt, StudentProfile } from "@/lib/types";
 import { Numpad } from "./Numpad";
 import { FactVisualizer } from "./FactVisualizer";
-import { DynamicRuleCard } from "./DynamicRuleCard";
-import { FormattedMathFact, FormattedEquation, HighlightedStrategyText } from "./FormattedMath";
+import {
+  FormattedMathFact,
+  FormattedEquation,
+  HighlightedStrategyText,
+  HeadlineMathFactBanner,
+} from "./FormattedMath";
 import { soundEffects } from "@/lib/sounds";
 import { getDynamicRuleExplanation, DynamicRuleExplanation } from "@/lib/ruleEngine";
 import { recordFactAnswer, addToReDrillQueue } from "@/lib/storage";
@@ -82,7 +79,6 @@ export function LessonEngine({
   // Scaffold visibility controls (fading)
   const [showHintScaffold, setShowHintScaffold] = useState<boolean>(false);
   const [hintUsedOnCurrentFact, setHintUsedOnCurrentFact] = useState<boolean>(false);
-  const [showWorkedExampleModal, setShowWorkedExampleModal] = useState<boolean>(false);
 
   // Accessibility & UI controls
   const [fontSize, setFontSize] = useState<"normal" | "large">("normal");
@@ -103,9 +99,8 @@ export function LessonEngine({
   const [errorFacts, setErrorFacts] = useState<string[]>([]);
   const [currentStreak, setCurrentStreak] = useState<number>(0);
   const [streakToast, setStreakToast] = useState<{
-    tier: "hot" | "supercharged" | "unstoppable" | "supernova";
+    tier: "hot" | "supercharged";
     title: string;
-    subtitle: string;
     emoji: string;
   } | null>(null);
 
@@ -120,19 +115,21 @@ export function LessonEngine({
     speedGoalMet: boolean;
   } | null>(null);
 
-  // Latency & Advancing Pause Lock Ref
-  // CRITICAL: isAdvancingRef blocks taps/keys during the 400ms pause to prevent double-tap pollution!
+  // P0: 400ms Second-Digit Pause & Double-Tap Pollution Cooldown Controls
+  const [isAdvancing, setIsAdvancing] = useState<boolean>(false);
   const isAdvancingRef = useRef<boolean>(false);
+  const advanceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const cooldownTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const questionStartTimeRef = useRef<number>(Date.now());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Initialize queue on lesson start or queue transition
+  // Initialize explanation on lesson load
   useEffect(() => {
     const expl = getDynamicRuleExplanation(lesson.id, lesson.targetFacts[0].a, lesson.targetFacts[0].b);
     setCheckExplanation(expl);
   }, [lesson]);
 
-  // Elapsed Practice Timer (Pausable; never teleports to gate!)
+  // Elapsed Practice Timer (Pausable; counts up continuously and never teleports)
   useEffect(() => {
     if (isPaused || phase === "complete") {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -169,7 +166,7 @@ export function LessonEngine({
     }
   };
 
-  // Start Step 2 "I Do" Check-for-Understanding
+  // Start Step 2 "I Do" Check-for-Understanding Screen (Strictly Separate from Drill)
   const handleStartModelCheck = () => {
     setPhase("model");
     setPhaseStepIndex(0);
@@ -213,7 +210,6 @@ export function LessonEngine({
   const startFluencySprint = useCallback(() => {
     setPhase("fluency");
     setPhaseStepIndex(0);
-    // 6 rapid fluency items mixing target facts and review facts
     const allPool = [...lesson.targetFacts, ...lesson.reviewFacts];
     const sprintItems: MathFact[] = [];
     for (let i = 0; i < 6; i++) {
@@ -239,7 +235,6 @@ export function LessonEngine({
   const startCheckoutGate = useCallback(() => {
     setPhase("checkout");
     setPhaseStepIndex(0);
-    // Take exactly 5 facts from target facts (cycle if < 5)
     const targets =
       lesson.targetFacts.length >= 5
         ? [...lesson.targetFacts].slice(0, 5)
@@ -256,7 +251,7 @@ export function LessonEngine({
     soundEffects.playModelChime();
   }, [lesson.targetFacts]);
 
-  // Re-drill / Retry Practice
+  // Retry Practice
   const handleRetryLesson = () => {
     startGuidedPractice();
     setCheckoutResults([]);
@@ -272,14 +267,14 @@ export function LessonEngine({
       const responseTime = Date.now() - questionStartTimeRef.current;
       setTotalAttempts((prev) => prev + 1);
 
-      // Phase: "model" Check-for-Understanding Question
+      // Phase: "model" Check-for-Understanding Screen (Scored only as the check!)
       if (phase === "model") {
         const expected = checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product;
         if (answerNum === expected) {
           soundEffects.playCorrect(1);
           setTypedAnswer("");
           setErrorMessage(null);
-          // Advance to Warm-Up
+          // Advance to Warm-Up Practice
           startWarmUpPhase();
         } else {
           soundEffects.playIncorrect();
@@ -304,13 +299,15 @@ export function LessonEngine({
         setCheckoutResults(updatedResults);
 
         if (student) {
+          // Gate facts belong to current lesson
           recordFactAnswer(
             student.id,
             currentFact.a,
             currentFact.b,
             "first-try",
             isCorrect,
-            responseTime
+            responseTime,
+            { isWarmUp: false, currentLessonId: lesson.id }
           );
         }
 
@@ -337,15 +334,12 @@ export function LessonEngine({
           setErrorMessage(null);
           questionStartTimeRef.current = Date.now();
         } else {
-          // Checkout complete! Evaluate true DI mastery criteria:
+          // Checkout complete! Gate pass decided by accuracy first (4+/5 or >=80%)
           const correctNum = updatedResults.filter((r) => r.isCorrect).length;
-          const accuracy = Math.round((correctNum / updatedResults.length) * 100);
           const avgLatency = Math.round(
             updatedResults.reduce((sum, r) => sum + r.latencyMs, 0) / updatedResults.length
           );
 
-          // P0 SPEC: Gate pass decided by accuracy first (4+/5 or >=80%).
-          // Speed is reported separately as a badge, NOT as a block to progression!
           const isMastered = correctNum >= 4; // 4/5 or 5/5
           const speedMet = avgLatency <= 3500;
 
@@ -381,7 +375,7 @@ export function LessonEngine({
         }
         setErrorMessage(null);
 
-        // Record in student storage
+        // Record in student storage with warm-up check to avoid muddying earlier lesson facts
         if (student) {
           const answerType = isErrorCorrecting ? "corrected" : "first-try";
           recordFactAnswer(
@@ -390,27 +384,17 @@ export function LessonEngine({
             currentFact.b,
             answerType,
             true,
-            responseTime
+            responseTime,
+            { isWarmUp: phase === "review", currentLessonId: lesson.id }
           );
         }
 
-        // Streak Toast celebrations
         if (nextStreak === 3) {
-          setStreakToast({
-            tier: "hot",
-            title: "3 In A Row!",
-            subtitle: "Warming up nicely 🔥",
-            emoji: "🔥",
-          });
-          setTimeout(() => setStreakToast(null), 1600);
+          setStreakToast({ tier: "hot", title: "3 In A Row!", emoji: "🔥" });
+          setTimeout(() => setStreakToast(null), 1400);
         } else if (nextStreak === 5) {
-          setStreakToast({
-            tier: "supercharged",
-            title: "5 Streak: Supercharged!",
-            subtitle: "Pitch is rising ⚡",
-            emoji: "⚡",
-          });
-          setTimeout(() => setStreakToast(null), 1600);
+          setStreakToast({ tier: "supercharged", title: "5 Streak!", emoji: "⚡" });
+          setTimeout(() => setStreakToast(null), 1400);
         }
 
         setIsErrorCorrecting(false);
@@ -452,23 +436,24 @@ export function LessonEngine({
             currentFact.b,
             "first-try",
             false,
-            responseTime
+            responseTime,
+            { isWarmUp: phase === "review", currentLessonId: lesson.id }
           );
           addToReDrillQueue(student.id, currentFact.a, currentFact.b);
         }
 
-        // Re-teach THIS exact fact with its own authentic reasoning!
+        // Re-teach THIS exact fact with its own authentic reasoning
         const factExpl = getDynamicRuleExplanation(lesson.id, currentFact.a, currentFact.b);
         setCorrectionExplanation(factExpl);
         setIsErrorCorrecting(true);
 
-        // Re-present this fact later in the same lesson (append to queue)
+        // Re-present this fact later in current queue
         setCurrentQueue((prev) => [...prev, currentFact]);
 
-        // Clear wrong entry automatically so correction typing doesn't create 2-digit error
+        // Auto-clear wrong entry
         setTypedAnswer("");
         setErrorMessage(
-          `Not quite. Look at the rule below: ${currentFact.a} × ${currentFact.b} = ${currentFact.product}.`
+          `Review the rule: ${currentFact.a} × ${currentFact.b} = ${currentFact.product}.`
         );
       }
     },
@@ -484,7 +469,6 @@ export function LessonEngine({
       lesson.id,
       phase,
       phaseStepIndex,
-      startCheckoutGate,
       startFluencySprint,
       startGuidedPractice,
       startWarmUpPhase,
@@ -493,10 +477,10 @@ export function LessonEngine({
     ]
   );
 
-  // 4. Handle input changes with 400ms Visible Second-Digit Pause & Input Freeze
+  // P0: Handle input changes with 400ms Visible Second-Digit Pause & Double-Tap Buffer
   const handleAnswerInput = useCallback(
     (rawVal: string) => {
-      // If advancing is locked during the 400ms pause, IGNORE all taps/keys!
+      // Ignore any taps/keys arriving during advance pause or cooldown
       if (isAdvancingRef.current) return;
 
       const sanitized = rawVal.replace(/[^0-9]/g, "").slice(0, 2);
@@ -506,36 +490,45 @@ export function LessonEngine({
       if (sanitized.length === 0) return;
 
       const num = parseInt(sanitized, 10);
-      const targetProduct =
+      const targetExpected =
         phase === "model"
           ? (checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product)
           : currentFact.product;
 
-      const isTargetSingleDigit = targetProduct < 10;
+      const isTargetSingleDigit = targetExpected < 10;
 
-      // Determine if the answer is complete:
-      // Case 1: Target is single digit AND 1 digit entered AND matches target
-      // Case 2: 2 digits entered (for any fact)
+      // Completion check:
+      // Single-digit target: completes if 1 digit matches, OR if 2 digits entered
+      // Two-digit target: STRICTLY requires 2 digits. Never evaluates on first digit!
       const isCompleteAnswer =
-        (isTargetSingleDigit && sanitized.length === 1 && num === targetProduct) ||
+        (isTargetSingleDigit && sanitized.length === 1 && num === targetExpected) ||
         sanitized.length === 2;
 
       if (isCompleteAnswer) {
-        // FREEZE INPUT IMMEDIATELY: Ignore any further taps or double-taps
+        // Freeze input immediately to ignore further taps and prevent double-tap pollution
         isAdvancingRef.current = true;
+        setIsAdvancing(true);
 
-        // Brief, visible pause (400ms) so the learner clearly sees what they typed
-        setTimeout(() => {
+        // Clear any existing timer
+        if (advanceTimeoutRef.current) clearTimeout(advanceTimeoutRef.current);
+        if (cooldownTimeoutRef.current) clearTimeout(cooldownTimeoutRef.current);
+
+        // 400ms visible pause: both digits stay together on screen
+        advanceTimeoutRef.current = setTimeout(() => {
           evaluateAnswer(num);
-          // Unfreeze after advancing
-          isAdvancingRef.current = false;
+
+          // 150ms cooldown post-evaluation: absorbs trailing taps before next problem is mounted
+          cooldownTimeoutRef.current = setTimeout(() => {
+            isAdvancingRef.current = false;
+            setIsAdvancing(false);
+          }, 150);
         }, 400);
       }
     },
     [checkExplanation, currentFact.product, evaluateAnswer, phase]
   );
 
-  // Physical keyboard support: digits always work without clicking into the box
+  // Physical keyboard support
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (phase === "complete" || isPaused || showExitConfirm) return;
@@ -554,12 +547,16 @@ export function LessonEngine({
         setTypedAnswer((prev) => prev.slice(0, -1));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (typedAnswer.length > 0) {
+        if (typedAnswer.length > 0 && !isAdvancingRef.current) {
           const num = parseInt(typedAnswer, 10);
           isAdvancingRef.current = true;
+          setIsAdvancing(true);
           setTimeout(() => {
             evaluateAnswer(num);
-            isAdvancingRef.current = false;
+            setTimeout(() => {
+              isAdvancingRef.current = false;
+              setIsAdvancing(false);
+            }, 150);
           }, 400);
         }
       }
@@ -573,7 +570,6 @@ export function LessonEngine({
   const handleFinishLesson = () => {
     const duration = elapsedSeconds;
     const accuracy = totalAttempts > 0 ? Math.round((correctCount / totalAttempts) * 100) : 100;
-
     const isMastered = checkoutFinalScore ? checkoutFinalScore.passed : accuracy >= 80;
     const stars: 1 | 2 | 3 = isMastered ? 3 : accuracy >= 75 ? 2 : 1;
 
@@ -596,7 +592,6 @@ export function LessonEngine({
     });
   };
 
-  // Safe Exit with Confirmation Dialog
   const handleRequestExit = () => {
     if (phase === "complete") {
       onExit();
@@ -605,61 +600,50 @@ export function LessonEngine({
     }
   };
 
-  const handleConfirmSaveAndExit = () => {
-    handleFinishLesson();
-  };
-
-  const handleConfirmDiscardAndExit = () => {
-    onExit();
-  };
+  // Current fact explanation for We Do & Re-teaching banners
+  const currentFactExpl = getDynamicRuleExplanation(lesson.id, currentFact.a, currentFact.b);
 
   return (
     <div
-      className={`w-full h-[calc(100dvh-56px)] max-h-[818px] flex flex-col justify-between p-2 sm:p-4 select-none relative overflow-hidden pb-safe ${
+      className={`w-full h-[calc(100dvh-56px)] max-h-[818px] flex flex-col justify-between p-2 sm:p-3 select-none relative overflow-hidden pb-safe ${
         fontSize === "large" ? "text-lg" : "text-base"
       }`}
     >
-      {/* Dynamic Animated Streak Milestone Banner */}
+      {/* Streak Toast */}
       <AnimatePresence>
         {streakToast && (
           <motion.div
             initial={{ scale: 0.5, y: -20, opacity: 0 }}
             animate={{ scale: [1, 1.1, 1], y: 0, opacity: 1 }}
             exit={{ scale: 0.8, y: -20, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className={`fixed top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 rounded-full border shadow-2xl flex items-center gap-2 backdrop-blur-xl pointer-events-none ${
-              streakToast.tier === "supercharged"
-                ? "bg-cyan-950/90 border-cyan-400 text-cyan-200"
-                : "bg-amber-950/90 border-amber-400 text-amber-200"
-            }`}
+            transition={{ duration: 0.2 }}
+            className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-1.5 rounded-full border border-amber-400 bg-amber-950/95 text-amber-200 text-xs font-black shadow-2xl flex items-center gap-1.5 backdrop-blur-xl pointer-events-none"
           >
-            <span className="text-lg">{streakToast.emoji}</span>
-            <span className="text-xs font-black uppercase tracking-wider">
-              {streakToast.title}
-            </span>
+            <span>{streakToast.emoji}</span>
+            <span>{streakToast.title}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* HEADER: PROGRESS, TIMER & ACCESSIBILITY CONTROLS */}
-      <div className="w-full max-w-lg mx-auto flex flex-col gap-1.5 shrink-0 z-20">
+      {/* HEADER: PROGRESS, TIMER & CONTROLS */}
+      <div className="w-full max-w-lg mx-auto flex flex-col gap-1 shrink-0 z-20">
         <div className="flex items-center justify-between px-1">
           {/* Phase Title Badge */}
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-lg sm:text-xl shrink-0">{lesson.icon}</span>
+            <span className="text-base sm:text-lg shrink-0">{lesson.icon}</span>
             <div className="flex flex-col min-w-0">
               <span className="text-xs font-black text-white truncate">{lesson.title}</span>
               <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">
                 {phase === "strategy_intro"
                   ? "Strategy Overview"
                   : phase === "model"
-                  ? "I Do — Check"
+                  ? "Check: Strategy Step"
                   : phase === "review"
-                  ? "Warm-Up"
+                  ? "Practice: Warm-Up"
                   : phase === "guided"
-                  ? "We Do — Guided"
+                  ? "Practice: We Do"
                   : phase === "fluency"
-                  ? "You Do — Sprint"
+                  ? "Practice: Sprint"
                   : phase === "transition_gate"
                   ? "Gate Transition"
                   : phase === "checkout"
@@ -669,9 +653,8 @@ export function LessonEngine({
             </div>
           </div>
 
-          {/* Controls: Read-Aloud, Font Size, Pause/Timer, Exit */}
+          {/* Controls: Read-Aloud, Font Size, Timer, Menu */}
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* Read Aloud Button */}
             <button
               onClick={() => {
                 if (phase === "strategy_intro") {
@@ -684,12 +667,10 @@ export function LessonEngine({
               }}
               className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer"
               title="Read aloud"
-              aria-label="Read question aloud"
             >
               <Volume2 className={`w-4 h-4 ${isReadingAloud ? "text-cyan-400 animate-pulse" : ""}`} />
             </button>
 
-            {/* Font Size Toggle */}
             <button
               onClick={() => setFontSize((prev) => (prev === "normal" ? "large" : "normal"))}
               className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer font-bold text-xs"
@@ -698,7 +679,6 @@ export function LessonEngine({
               <Type className="w-3.5 h-3.5" />
             </button>
 
-            {/* Elapsed Timer with Pause Toggle */}
             <button
               onClick={() => setIsPaused((prev) => !prev)}
               className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 font-mono text-xs font-bold text-cyan-300 cursor-pointer"
@@ -708,7 +688,6 @@ export function LessonEngine({
               <span>{formatElapsed(elapsedSeconds)}</span>
             </button>
 
-            {/* Exit Menu Button */}
             <button
               onClick={handleRequestExit}
               className="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold cursor-pointer"
@@ -740,75 +719,63 @@ export function LessonEngine({
             }}
           />
         </div>
+
+        {/* P0: PERSISTENT VISIBLE STRATEGY HEADER (Stays on every step of every lesson) */}
+        <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
+          <span className="truncate">
+            <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
+            {lesson.ruleName} — {lesson.ruleSummary}
+          </span>
+        </div>
       </div>
 
-      {/* WORKSPACE CONTENT AREA */}
+      {/* WORKSPACE CONTENT AREA (Optimized for iPhone 17 402x874 portrait with zero vertical scroll) */}
       <div className="w-full max-w-lg mx-auto flex-1 flex flex-col justify-center min-h-0 py-1">
-        {/* PHASE 1: STRATEGY OVERVIEW & CONTEXT */}
+        {/* PHASE 1: STRATEGY OVERVIEW */}
         {phase === "strategy_intro" && checkExplanation ? (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/60 border border-white/15 p-4 flex flex-col gap-3 text-left overflow-y-auto max-h-[520px]"
+            className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/70 border border-white/15 p-3.5 flex flex-col gap-2.5 text-left max-h-[500px]"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <h2 className="text-sm font-black text-white">{checkExplanation.ruleName}</h2>
-              </div>
-              <FormattedMathFact
-                a={currentFact.a}
-                b={currentFact.b}
-                product={currentFact.product}
-                size="md"
-              />
-            </div>
+            {/* Headline Math Fact Banner */}
+            <HeadlineMathFactBanner
+              a={currentFact.a}
+              b={currentFact.b}
+              product={currentFact.product}
+              label={checkExplanation.ruleName}
+              strategyText={checkExplanation.conclusion || checkExplanation.strategyOverview}
+              repeatedAddition={checkExplanation.repeatedAddition}
+            />
 
-            {/* Strategy Overview Paragraph with Bigger, Bolder Colors */}
-            <div className="text-xs sm:text-sm text-white/90 leading-relaxed font-medium">
-              <HighlightedStrategyText
-                text={checkExplanation.strategyOverview}
-                factorA={currentFact.a}
-                factorB={currentFact.b}
-                product={currentFact.product}
-              />
-            </div>
-
-            {/* Older-child Context Lead-In */}
-            <div className="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
+            {/* Context Lead-In */}
+            <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
               <span className="font-bold text-cyan-300">Context: </span>
               {checkExplanation.contextLeadIn}
             </div>
 
             {/* Worked Example Steps */}
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-bold text-white/50 uppercase tracking-wider">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
                 Worked Example Steps:
               </span>
-              {checkExplanation.steps.map((st) => (
+              {checkExplanation.steps.slice(0, 2).map((st) => (
                 <div
                   key={st.stepNumber}
-                  className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-white/10 text-xs"
+                  className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
                 >
-                  <span className="font-bold text-white/80">
+                  <span className="font-bold text-white/80 text-[11px]">
                     Step {st.stepNumber}: {st.label}
                   </span>
                   <FormattedEquation
                     mathString={st.math}
                     factorA={currentFact.a}
                     factorB={currentFact.b}
-                    size="md"
+                    size="sm"
                   />
                 </div>
               ))}
             </div>
-
-            {/* Commutativity Note if available */}
-            {checkExplanation.commutativityNote && (
-              <p className="text-[11px] text-amber-300/90 font-medium italic">
-                💡 {checkExplanation.commutativityNote}
-              </p>
-            )}
 
             <button
               onClick={handleStartModelCheck}
@@ -819,23 +786,29 @@ export function LessonEngine({
             </button>
           </motion.div>
         ) : phase === "model" && checkExplanation ? (
-          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Not Copying!) */
+          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Separate screen & separate scoring from drill) */
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3.5 flex flex-col items-center gap-2.5 text-center my-auto"
+            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3 flex flex-col items-center gap-2 text-center my-auto"
           >
-            <div className="px-3 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[11px] font-black uppercase tracking-wider">
-              Check for Understanding
+            {/* Headline Fact Banner pairing fact with strategy */}
+            <HeadlineMathFactBanner
+              a={currentFact.a}
+              b={currentFact.b}
+              product={currentFact.product}
+              label="Check: Strategy Step"
+              strategyText={`Strategy: ${checkExplanation.strategyOverview}`}
+              repeatedAddition={checkExplanation.repeatedAddition}
+            />
+
+            {/* Conceptual Question Prompt (Separate from drill fact) */}
+            <div className="px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-200 text-xs sm:text-sm font-bold w-full">
+              {checkExplanation.checkQuestion.prompt}
             </div>
 
-            {/* Question Prompt (Different from drill product) */}
-            <p className="text-xs sm:text-sm text-white/90 font-semibold px-2">
-              {checkExplanation.checkQuestion.prompt}
-            </p>
-
-            {/* Dot Groups Canvas */}
-            <div className="w-full max-h-[140px] overflow-hidden">
+            {/* Scaffold Visualizer */}
+            <div className="w-full max-h-[120px] overflow-hidden">
               <FactVisualizer
                 factorA={currentFact.a}
                 factorB={currentFact.b}
@@ -844,7 +817,7 @@ export function LessonEngine({
               />
             </div>
 
-            {/* Answer Display Box */}
+            {/* Conceptual Answer Box */}
             <div
               className={`w-18 h-12 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl tracking-tight transition-all ${
                 errorMessage
@@ -864,7 +837,7 @@ export function LessonEngine({
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full rounded-2xl bg-gradient-to-b from-rose-950/40 to-black/60 border-2 border-rose-500/40 p-5 flex flex-col items-center gap-4 text-center my-auto"
+            className="w-full rounded-2xl bg-gradient-to-b from-rose-950/40 to-black/60 border-2 border-rose-500/40 p-5 flex flex-col items-center gap-3 text-center my-auto"
           >
             <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
               <Target className="w-6 h-6" />
@@ -873,16 +846,16 @@ export function LessonEngine({
             <div className="flex flex-col gap-1">
               <h2 className="text-lg font-black text-white">Next: Checkout Gate</h2>
               <p className="text-xs sm:text-sm text-white/80 leading-relaxed max-w-sm">
-                Next: no groups. You are on your own for 5 problems.
+                Next: no groups shown. You are on your own for 5 problems.
               </p>
               <span className="text-[11px] text-amber-300 font-bold pt-1">
-                Target: under 3.5 seconds per fact • Goal: 4+ out of 5
+                Accuracy Goal: 4+ out of 5 • Speed Target: under 3.5s per fact
               </span>
             </div>
 
             <button
               onClick={startCheckoutGate}
-              className="w-full max-w-xs h-12 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-500/30 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full max-w-xs h-11 rounded-xl bg-gradient-to-r from-rose-500 to-amber-500 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-rose-500/30 flex items-center justify-center gap-2 cursor-pointer mt-1"
             >
               <span>Start Checkout Gate</span>
               <ArrowRight className="w-4 h-4 stroke-[3]" />
@@ -893,11 +866,11 @@ export function LessonEngine({
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-5 flex flex-col items-center text-center gap-4 my-auto"
+            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-4 flex flex-col items-center text-center gap-3 my-auto"
           >
             {checkoutFinalScore?.passed ? (
               <>
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-400 to-emerald-400 flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/30">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-emerald-400 flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/30">
                   🏆
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -906,25 +879,42 @@ export function LessonEngine({
                     <span>Lesson Mastered!</span>
                   </div>
                   <h2 className="text-xl font-black text-white">{lesson.title}</h2>
-                  <span className="text-xs text-white/60">Checkout Gate passed with high accuracy!</span>
+                  <span className="text-xs text-white/60">Passed accuracy requirement with flying colors!</span>
                 </div>
 
                 {/* Score & Speed Badges */}
                 <div className="grid grid-cols-2 gap-2 w-full pt-1">
-                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex flex-col">
+                  <div className="p-2 rounded-xl bg-white/5 border border-white/10 flex flex-col">
                     <span className="text-lg font-black text-emerald-400">
                       {checkoutFinalScore.correct}/{checkoutFinalScore.total}
                     </span>
                     <span className="text-[10px] text-white/50 font-bold uppercase">Accuracy</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-white/5 border border-white/10 flex flex-col">
+                  <div className="p-2 rounded-xl bg-white/5 border border-white/10 flex flex-col">
                     <span className="text-lg font-black text-cyan-400">
                       {(checkoutFinalScore.averageLatencyMs / 1000).toFixed(1)}s
                     </span>
                     <span className="text-[10px] text-white/50 font-bold uppercase">
-                      {checkoutFinalScore.speedGoalMet ? "⚡ Target Met" : "Developing"}
+                      {checkoutFinalScore.speedGoalMet ? "⚡ Speed Target Met" : "Developing"}
                     </span>
                   </div>
+                </div>
+
+                {/* Facts Mastered Grid Review with Light Blue, Light Purple, Gold Colors */}
+                <div className="w-full flex items-center justify-center gap-2 flex-wrap pt-1">
+                  {checkoutResults.map((r, i) => (
+                    <div
+                      key={i}
+                      className="px-2 py-1 rounded-lg bg-black/40 border border-white/10 flex items-center gap-1 text-xs"
+                    >
+                      <FormattedMathFact
+                        a={r.fact.a}
+                        b={r.fact.b}
+                        product={r.fact.product}
+                        size="sm"
+                      />
+                    </div>
+                  ))}
                 </div>
 
                 <button
@@ -937,7 +927,7 @@ export function LessonEngine({
               </>
             ) : (
               <>
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-2xl shadow-lg shadow-rose-500/30">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-2xl shadow-lg shadow-rose-500/30">
                   💪
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -966,39 +956,77 @@ export function LessonEngine({
             )}
           </motion.div>
         ) : (
-          /* STANDARD LESSON DRILL: REVIEW, GUIDED, FLUENCY, OR CHECKOUT */
-          <div className="w-full flex flex-col items-center gap-2 my-auto">
-            {/* Speed Target / Context pill */}
-            {phase === "checkout" ? (
-              <div className="flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[10px] font-bold">
-                <Target className="w-3 h-3" />
-                <span>Target: under 3.5 seconds per fact</span>
-              </div>
-            ) : (
+          /* STANDARD LESSON DRILL: REVIEW (WARM-UP), GUIDED (WE DO), FLUENCY, OR CHECKOUT */
+          <div className="w-full flex flex-col items-center gap-1.5 my-auto">
+            {/* In "We Do" (guided), pair the fact with strategy in headline banner */}
+            {phase === "guided" && (
+              <HeadlineMathFactBanner
+                a={currentFact.a}
+                b={currentFact.b}
+                product={currentFact.product}
+                label="We Do — Guided"
+                strategyText={`Strategy: ${currentFactExpl.strategyOverview}`}
+                repeatedAddition={currentFactExpl.repeatedAddition}
+              />
+            )}
+
+            {/* In "Fluency" with hint requested, show hint banner */}
+            {phase === "fluency" && (
               <div className="flex items-center gap-2 text-[11px] text-white/60">
                 <span className="font-bold text-amber-300">{lesson.ruleName}</span>
-                {phase === "fluency" && (
-                  <button
-                    onClick={() => {
-                      setShowHintScaffold((prev) => !prev);
-                      setHintUsedOnCurrentFact(true);
-                    }}
-                    className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/15 text-white/80 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <HelpCircle className="w-3 h-3 text-cyan-400" />
-                    <span>{showHintScaffold ? "Hide Hint" : "Show Hint"}</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => {
+                    setShowHintScaffold((prev) => !prev);
+                    setHintUsedOnCurrentFact(true);
+                  }}
+                  className="px-2 py-0.5 rounded-md bg-white/10 hover:bg-white/15 text-white/80 text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <HelpCircle className="w-3 h-3 text-cyan-400" />
+                  <span>{showHintScaffold ? "Hide Strategy Hint" : "Show Strategy Hint"}</span>
+                </button>
               </div>
             )}
 
-            {/* Math Problem Numerals with Color Reinforcement */}
+            {phase === "fluency" && showHintScaffold && (
+              <HeadlineMathFactBanner
+                a={currentFact.a}
+                b={currentFact.b}
+                product={currentFact.product}
+                label="Fluency Strategy Hint"
+                strategyText={`Strategy: ${currentFactExpl.strategyOverview}`}
+                repeatedAddition={currentFactExpl.repeatedAddition}
+              />
+            )}
+
+            {/* Error Re-Teaching Banner: Headlines the fact with light blue, light purple, gold */}
+            {isErrorCorrecting && correctionExplanation && (
+              <HeadlineMathFactBanner
+                a={currentFact.a}
+                b={currentFact.b}
+                product={currentFact.product}
+                label="Re-Teaching Fact"
+                strategyText={`Strategy: ${correctionExplanation.strategyOverview}`}
+                repeatedAddition={correctionExplanation.repeatedAddition}
+              />
+            )}
+
+            {/* Math Problem Numerals with High-Contrast Factor Color Reinforcement */}
             <div className="flex items-center justify-center gap-2 sm:gap-3 my-0.5">
-              <span className={`font-black text-cyan-400 font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`} title="Number of groups">
+              <span
+                className={`font-black text-sky-300 font-mono ${
+                  fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"
+                }`}
+                title="First factor (light blue)"
+              >
                 {currentFact.a}
               </span>
               <span className="text-2xl sm:text-3xl font-black text-white/40">×</span>
-              <span className={`font-black text-purple-300 font-mono ${fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"}`} title="Items per group">
+              <span
+                className={`font-black text-purple-300 font-mono ${
+                  fontSize === "large" ? "text-5xl sm:text-6xl" : "text-4xl sm:text-5xl"
+                }`}
+                title="Second factor (light purple)"
+              >
                 {currentFact.b}
               </span>
               <span className="text-2xl sm:text-3xl font-black text-white/40">=</span>
@@ -1008,6 +1036,8 @@ export function LessonEngine({
                 className={`w-16 h-12 sm:w-20 sm:h-14 rounded-2xl border-2 flex items-center justify-center font-mono font-black text-2xl sm:text-3xl tracking-tight transition-all ${
                   errorMessage
                     ? "bg-rose-950/70 border-rose-500 text-rose-300 animate-shake"
+                    : isAdvancing
+                    ? "bg-cyan-950/90 border-cyan-300 text-amber-300 ring-4 ring-cyan-400/40 shadow-[0_0_20px_rgba(6,182,212,0.5)] scale-105"
                     : "bg-black/90 border-cyan-400 text-cyan-200 ring-2 ring-cyan-400/20 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
                 }`}
               >
@@ -1015,38 +1045,14 @@ export function LessonEngine({
               </div>
             </div>
 
-            {/* Error Correction / Specific Re-Teaching Banner */}
-            {isErrorCorrecting && correctionExplanation && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="w-full p-2.5 rounded-xl bg-rose-950/70 border border-rose-500/40 text-rose-200 text-xs flex flex-col gap-1"
-              >
-                <div className="flex items-center gap-1.5 font-black text-rose-300">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Re-Teaching {currentFact.a} × {currentFact.b}:</span>
-                </div>
-                <p className="leading-snug">
-                  <strong>{currentFact.a} × {currentFact.b} = {currentFact.product}</strong>
-                  <br />
-                  {correctionExplanation.repeatedAddition && (
-                    <span className="font-mono text-amber-300">{correctionExplanation.repeatedAddition}</span>
-                  )}
-                </p>
-                <span className="text-amber-300 font-bold text-[11px]">
-                  → Now type {currentFact.product} to confirm:
-                </span>
-              </motion.div>
-            )}
-
-            {/* Scaffold Fading Logic:
+            {/* Scaffold Visualizer: Faded according to Direct Instruction rules
                 - Review (Warmup): full dots + repeated addition
-                - Guided: full or partial groups
-                - Fluency: dots hidden (revealed only if showHintScaffold is true)
+                - Guided: full groups
+                - Fluency: dots hidden (unless user requests hint)
                 - Checkout: bare problems (no groups)
             */}
             {phase !== "checkout" && (phase !== "fluency" || showHintScaffold) && (
-              <div className="w-full max-h-[135px] overflow-hidden">
+              <div className="w-full max-h-[125px] overflow-hidden">
                 <FactVisualizer
                   factorA={currentFact.a}
                   factorB={currentFact.b}
@@ -1059,19 +1065,24 @@ export function LessonEngine({
         )}
       </div>
 
-      {/* NUMPAD: Pinned at bottom with 44pt tap targets */}
+      {/* NUMPAD: Pinned at bottom with 44pt tap targets & disabled state during 400ms pause */}
       {phase !== "complete" && phase !== "strategy_intro" && phase !== "transition_gate" && (
         <div className="w-full max-w-sm mx-auto shrink-0 pb-1">
           <Numpad
             value={typedAnswer}
             onChange={handleAnswerInput}
+            disabled={isAdvancing}
             onSubmit={() => {
               if (typedAnswer.length > 0 && !isAdvancingRef.current) {
                 const num = parseInt(typedAnswer, 10);
                 isAdvancingRef.current = true;
+                setIsAdvancing(true);
                 setTimeout(() => {
                   evaluateAnswer(num);
-                  isAdvancingRef.current = false;
+                  setTimeout(() => {
+                    isAdvancingRef.current = false;
+                    setIsAdvancing(false);
+                  }, 150);
                 }, 400);
               }
             }}
@@ -1093,7 +1104,7 @@ export function LessonEngine({
                 Resume Lesson
               </button>
               <button
-                onClick={handleConfirmSaveAndExit}
+                onClick={handleFinishLesson}
                 className="w-full h-10 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 text-xs font-bold cursor-pointer"
               >
                 Save & Leave
@@ -1113,13 +1124,13 @@ export function LessonEngine({
             </p>
             <div className="flex flex-col gap-2 pt-2">
               <button
-                onClick={handleConfirmSaveAndExit}
+                onClick={handleFinishLesson}
                 className="w-full h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-cyan-500/20"
               >
                 Save Progress & Leave
               </button>
               <button
-                onClick={handleConfirmDiscardAndExit}
+                onClick={onExit}
                 className="w-full h-10 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 text-xs font-bold cursor-pointer"
               >
                 Leave Without Saving

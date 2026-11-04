@@ -173,6 +173,73 @@ const SEED_STUDENTS: StudentProfile[] = [
   },
 ];
 
+export function reconcileStudentMastery(student: StudentProfile): StudentProfile {
+  // Determine which lessons are mastered
+  const masteredLessonIds = new Set<number>();
+
+  if (Array.isArray(student.lessonHistory)) {
+    student.lessonHistory.forEach((att) => {
+      if (att.checkoutPassed) {
+        masteredLessonIds.add(att.lessonId);
+      }
+    });
+  }
+
+  // If student is on Lesson N > 1, all prior lessons 1..(N-1) were mastered
+  const currentLvl = student.currentLessonId || 1;
+  for (let l = 1; l < currentLvl; l++) {
+    masteredLessonIds.add(l);
+  }
+
+  // Also include any lessons recorded in totalLessonsMastered counter
+  for (let l = 1; l <= (student.totalLessonsMastered || 0); l++) {
+    masteredLessonIds.add(l);
+  }
+
+  const factMastery = student.factMastery ? { ...student.factMastery } : generateEmptyFactMastery();
+
+  // For each mastered lesson, reconcile all its facts as 'mastered' in the 9x9 grid
+  masteredLessonIds.forEach((lessonId) => {
+    const facts = getLessonMasteryFacts(lessonId);
+    facts.forEach(({ a, b }) => {
+      const key1 = `${a}x${b}`;
+      const key2 = `${b}x${a}`;
+      [key1, key2].forEach((k) => {
+        if (!factMastery[k]) {
+          factMastery[k] = {
+            factKey: k,
+            a,
+            b,
+            product: a * b,
+            attempts: 1,
+            correct: 1,
+            lastResponseTimeMs: 1500,
+            averageResponseTimeMs: 1500,
+            consecutiveCorrect: 1,
+            status: "mastered",
+            lastPracticed: new Date().toISOString(),
+            firstTryCorrect: 1,
+            correctedCount: 0,
+            missedDates: [],
+          };
+        } else {
+          factMastery[k].status = "mastered";
+        }
+      });
+    });
+  });
+
+  return {
+    ...student,
+    factMastery,
+    totalLessonsMastered: Math.max(student.totalLessonsMastered || 0, masteredLessonIds.size),
+    totalLessonsCompleted: Math.max(student.totalLessonsCompleted || 0, student.lessonHistory?.length || 0),
+    streakDays: student.streakDays || 0,
+    reDrillQueue: student.reDrillQueue || [],
+    lastPracticeDateChicago: student.lastPracticeDateChicago || "",
+  };
+}
+
 export function loadAllStudents(): StudentProfile[] {
   const storage = getStorage();
   if (!storage) return [];
@@ -183,14 +250,7 @@ export function loadAllStudents(): StudentProfile[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.map((s) => ({
-        ...s,
-        totalLessonsMastered: s.totalLessonsMastered ?? 0,
-        totalLessonsCompleted: s.totalLessonsCompleted ?? 0,
-        reDrillQueue: s.reDrillQueue ?? [],
-        lastPracticeDateChicago: s.lastPracticeDateChicago ?? "",
-        factMastery: s.factMastery ?? generateEmptyFactMastery(),
-      }));
+      return parsed.map((s) => reconcileStudentMastery(s));
     }
     return [];
   } catch {
@@ -281,7 +341,8 @@ export function recordFactAnswer(
   b: number,
   answerType: "first-try" | "corrected" | "copied",
   isCorrect: boolean,
-  responseTimeMs: number
+  responseTimeMs: number,
+  options?: { isWarmUp?: boolean; currentLessonId?: number }
 ): void {
   if (answerType === "copied") {
     // "I Do" copied answers never count toward mastery, streak, or fact counts.
@@ -294,6 +355,12 @@ export function recordFactAnswer(
 
   const key1 = `${a}x${b}`;
   const key2 = `${b}x${a}`;
+
+  const currentLessonFacts = options?.currentLessonId ? getLessonMasteryFacts(options.currentLessonId) : [];
+  const belongsToCurrentLesson = options?.currentLessonId
+    ? currentLessonFacts.some((f) => (f.a === a && f.b === b) || (f.a === b && f.b === a))
+    : true;
+  const isWarmUp = Boolean(options?.isWarmUp);
 
   const updateKey = (key: string) => {
     let record = student.factMastery[key];
@@ -359,13 +426,15 @@ export function recordFactAnswer(
       record.correctedCount = (record.correctedCount || 0) + 1;
     }
 
-    // A fact ONLY becomes mastered when its lesson checkout gate is passed.
-    // In-drill answers only advance status from unreached to learning/progressing.
+    // P1 RULE: Warm-up items must NOT change the mastery status of facts that belong to other lessons.
+    // Only facts in the current lesson change status, and only through guided/fluency/gate first-try answers.
     if (record.status !== "mastered") {
-      if (record.consecutiveCorrect >= 2) {
-        record.status = "progressing";
-      } else {
-        record.status = "learning";
+      if (!isWarmUp && belongsToCurrentLesson) {
+        if (record.consecutiveCorrect >= 2) {
+          record.status = "progressing";
+        } else {
+          record.status = "learning";
+        }
       }
     }
 
@@ -377,10 +446,10 @@ export function recordFactAnswer(
     updateKey(key2);
   }
 
-  // Update Chicago calendar day streak
+  // Update Chicago calendar day streak - preserve existing streak!
   const todayChicago = getChicagoDateString();
   if (!student.lastPracticeDateChicago) {
-    student.streakDays = 1;
+    student.streakDays = Math.max(1, student.streakDays || 1);
     student.lastPracticeDateChicago = todayChicago;
   } else if (student.lastPracticeDateChicago !== todayChicago) {
     const diff = daysBetweenDates(student.lastPracticeDateChicago, todayChicago);
@@ -426,10 +495,10 @@ export function recordLessonComplete(
   student.totalLessonsCompleted += 1; // Attempted / Practised count
   student.totalMinutesPracticed += Math.max(1, Math.round(attempt.durationSeconds / 60));
 
-  // Calendar day streak update
+  // Calendar day streak update - preserve existing streak!
   const todayChicago = getChicagoDateString();
   if (!student.lastPracticeDateChicago) {
-    student.streakDays = 1;
+    student.streakDays = Math.max(1, student.streakDays || 1);
     student.lastPracticeDateChicago = todayChicago;
   } else if (student.lastPracticeDateChicago !== todayChicago) {
     const diff = daysBetweenDates(student.lastPracticeDateChicago, todayChicago);
@@ -445,8 +514,10 @@ export function recordLessonComplete(
   const isMastered = Boolean(attempt.checkoutPassed);
 
   if (isMastered) {
-    // 1. Increment totalLessonsMastered (truthful: failed gate never increments this)
-    student.totalLessonsMastered = (student.totalLessonsMastered || 0) + 1;
+    // 1. Advance to next lesson if currently on this lesson
+    if (student.currentLessonId === attempt.lessonId) {
+      student.currentLessonId = Math.min(11, student.currentLessonId + 1);
+    }
 
     // 2. Mark this lesson's exact facts as mastered in the 9x9 fact grid
     const lessonFacts = getLessonMasteryFacts(attempt.lessonId);
@@ -478,10 +549,9 @@ export function recordLessonComplete(
       });
     });
 
-    // 3. Advance to next lesson if currently on this lesson
-    if (student.currentLessonId === attempt.lessonId) {
-      student.currentLessonId = Math.min(11, student.currentLessonId + 1);
-    }
+    // Reconcile mastery across roadmap, counter, and grid so all metrics agree
+    const reconciled = reconcileStudentMastery(student);
+    Object.assign(student, reconciled);
 
     // Award bonus XP
     student.xp += attempt.starsEarned * 50 + attempt.correctCount * 5 + 150;

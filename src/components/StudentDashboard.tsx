@@ -25,11 +25,15 @@ import { soundEffects } from "@/lib/sounds";
 interface StudentDashboardProps {
   student: StudentProfile;
   onStartLesson: (lesson: DILesson) => void;
+  onOpenTeacherPortal?: () => void;
+  onSwitchStudent?: () => void;
 }
 
 export function StudentDashboard({
   student,
   onStartLesson,
+  onOpenTeacherPortal,
+  onSwitchStudent,
 }: StudentDashboardProps) {
   // Current recommended lesson
   const currentLesson = DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];
@@ -373,6 +377,26 @@ export function StudentDashboard({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Footer Navigation: Switch Profile & Teacher Portal */}
+      <div className="w-full pt-2 pb-6 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-white/50">
+        {onSwitchStudent && (
+          <button
+            onClick={onSwitchStudent}
+            className="hover:text-cyan-400 font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <span>← Switch Profile</span>
+          </button>
+        )}
+        {onOpenTeacherPortal && (
+          <button
+            onClick={onOpenTeacherPortal}
+            className="text-amber-400/80 hover:text-amber-300 font-bold transition-colors cursor-pointer flex items-center gap-1.5 ml-auto"
+          >
+            <span>View Teacher Portal →</span>
+          </button>
+        )}
       </div>
     </div>
   );
