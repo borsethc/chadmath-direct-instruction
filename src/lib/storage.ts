@@ -1,26 +1,39 @@
-import { StudentProfile, LessonAttempt, TeacherAnalytics, FactMasteryRecord } from "./types";
+import type { StudentProfile, LessonAttempt, TeacherAnalytics, FactMasteryRecord } from "./types.ts";
 
 const STORAGE_KEY = "chadmath_di_students_v3";
 const ACTIVE_STUDENT_KEY = "chadmath_di_active_student_v3";
 const OWNER_PIN_STORAGE_KEY = "chadmath_di_owner_teacher_pin_v1";
 
+function getStorage(): Storage | null {
+  if (typeof window !== "undefined" && window.localStorage) {
+    return window.localStorage;
+  }
+  if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+    return (globalThis as any).localStorage;
+  }
+  return null;
+}
+
 // Owner-set Teacher PIN management (No hardcoded PIN, never printed in UI)
 export function hasTeacherPinSet(): boolean {
-  if (typeof window === "undefined") return false;
-  const pin = localStorage.getItem(OWNER_PIN_STORAGE_KEY);
+  const storage = getStorage();
+  if (!storage) return false;
+  const pin = storage.getItem(OWNER_PIN_STORAGE_KEY);
   return Boolean(pin && pin.trim().length >= 4);
 }
 
 export function setTeacherPin(newPin: string): boolean {
-  if (typeof window === "undefined") return false;
+  const storage = getStorage();
+  if (!storage) return false;
   if (!newPin || newPin.trim().length < 4) return false;
-  localStorage.setItem(OWNER_PIN_STORAGE_KEY, newPin.trim());
+  storage.setItem(OWNER_PIN_STORAGE_KEY, newPin.trim());
   return true;
 }
 
 export function verifyTeacherPin(enteredPin: string): boolean {
-  if (typeof window === "undefined") return false;
-  const savedPin = localStorage.getItem(OWNER_PIN_STORAGE_KEY);
+  const storage = getStorage();
+  if (!storage) return false;
+  const savedPin = storage.getItem(OWNER_PIN_STORAGE_KEY);
   if (!savedPin) return false;
   return savedPin.trim() === enteredPin.trim();
 }
@@ -161,11 +174,12 @@ const SEED_STUDENTS: StudentProfile[] = [
 ];
 
 export function loadAllStudents(): StudentProfile[] {
-  if (typeof window === "undefined") return SEED_STUDENTS;
+  const storage = getStorage();
+  if (!storage) return SEED_STUDENTS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SEED_STUDENTS));
+      storage.setItem(STORAGE_KEY, JSON.stringify(SEED_STUDENTS));
       return SEED_STUDENTS;
     }
     const parsed = JSON.parse(raw);
@@ -187,22 +201,25 @@ export function loadAllStudents(): StudentProfile[] {
 }
 
 export function saveAllStudents(students: StudentProfile[]): void {
-  if (typeof window === "undefined") return;
+  const storage = getStorage();
+  if (!storage) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(students));
+    storage.setItem(STORAGE_KEY, JSON.stringify(students));
   } catch (err) {
     console.error("Error saving students:", err);
   }
 }
 
 export function getActiveStudentId(): string {
-  if (typeof window === "undefined") return "student-1";
-  return localStorage.getItem(ACTIVE_STUDENT_KEY) || "student-1";
+  const storage = getStorage();
+  if (!storage) return "student-1";
+  return storage.getItem(ACTIVE_STUDENT_KEY) || "student-1";
 }
 
 export function setActiveStudentId(id: string): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(ACTIVE_STUDENT_KEY, id);
+  const storage = getStorage();
+  if (!storage) return;
+  storage.setItem(ACTIVE_STUDENT_KEY, id);
 }
 
 export function getStudentById(id: string): StudentProfile | null {

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "test": "node --experimental-strip-types scripts/verify-model-banners.mjs && node --experimental-strip-types scripts/verify-layout-dimensions.mjs",
+    "test": "node --experimental-strip-types scripts/verify-model-banners.mjs && node --experimental-strip-types scripts/verify-layout-dimensions.mjs && node --experimental-strip-types scripts/run-acceptance-tests.mjs",
     "build": "npm run test && next build",
     "start": "next start",
     "lint": "eslint"

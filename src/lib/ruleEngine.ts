@@ -121,7 +121,11 @@ export function getDynamicRuleExplanation(
       ruleName: "Identity Rule (×1)",
       concept: "One group of any quantity remains that exact quantity.",
       strategyOverview:
-        "The identity property states that 1 times any number is the number itself. One group containing N items simply contains N items.",
+        factorA === 1
+          ? isOneByOne
+            ? "1 × 1 is 1 group of 1, so the total is 1."
+            : `1 × ${n} is 1 group of ${n}, so the total is ${n}. The identity property states that 1 times any number is the number itself.`
+          : `${factorA} × 1 is ${factorA} groups of 1, so the total is ${factorA}.`,
       contextLeadIn: `Purchasing 1 item priced at $${n} costs exactly $${n}.`,
       steps,
       conclusion: `${factorA} × ${factorB} = ${product}`,
