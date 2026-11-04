@@ -16,27 +16,24 @@ import {
 import { DI_LESSONS } from "@/lib/lessons";
 
 export default function Home() {
-  const [students, setStudents] = useState<StudentProfile[]>([]);
   const [activeStudent, setActiveStudent] = useState<StudentProfile | null>(null);
   const [currentView, setCurrentView] = useState<"dashboard" | "lesson" | "login">("login");
   const [activeLesson, setActiveLesson] = useState<DILesson | null>(null);
   const [confettiTrigger, setConfettiTrigger] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Initialize and load saved student
+  // Initialize and load saved student from cookie / storage
   useEffect(() => {
     const loadedStudents = loadAllStudents();
-    setStudents(loadedStudents);
-
     const savedId = getActiveStudentId();
-    const current = loadedStudents.find((s) => s.id === savedId) || (loadedStudents.length > 0 ? loadedStudents[0] : null);
-    setActiveStudent(current);
+    const current = loadedStudents.find((s) => s.id === savedId) || null;
 
-    // If no students exist or no active profile, force login view so first-time users create username immediately
-    if (loadedStudents.length === 0 || !current) {
-      setCurrentView("login");
-    } else {
+    if (current) {
+      setActiveStudent(current);
       setCurrentView("dashboard");
+    } else {
+      setActiveStudent(null);
+      setCurrentView("login");
     }
     setIsLoaded(true);
   }, []);
@@ -44,16 +41,7 @@ export default function Home() {
   const handleSelectStudent = (student: StudentProfile) => {
     setActiveStudent(student);
     setActiveStudentId(student.id);
-    setStudents(loadAllStudents());
     setCurrentView("dashboard");
-  };
-
-  const handleGuestStart = () => {
-    if (students.length > 0) {
-      handleSelectStudent(students[0]);
-    } else {
-      setCurrentView("login");
-    }
   };
 
   const handleStartLesson = (lesson: DILesson) => {
@@ -66,7 +54,6 @@ export default function Home() {
     const updated = recordLessonComplete(activeStudent.id, attemptData);
     if (updated) {
       setActiveStudent(updated);
-      setStudents(loadAllStudents());
     }
     if (attemptData.checkoutPassed) {
       setConfettiTrigger(true);
@@ -87,10 +74,6 @@ export default function Home() {
       {/* Top Navbar */}
       <Navbar
         currentStudent={activeStudent}
-        onSwitchStudent={() => {
-          setStudents(loadAllStudents());
-          setCurrentView("login");
-        }}
         onGoHome={() => {
           if (activeStudent) {
             setCurrentView("dashboard");
@@ -106,11 +89,7 @@ export default function Home() {
       {/* Main View Router */}
       <main className="flex-1 flex flex-col">
         {currentView === "login" && (
-          <StudentLogin
-            students={students}
-            onSelectStudent={handleSelectStudent}
-            onGuestStart={handleGuestStart}
-          />
+          <StudentLogin onSelectStudent={handleSelectStudent} />
         )}
 
         {currentView === "dashboard" && activeStudent && (

@@ -7,15 +7,10 @@ import { soundEffects } from "@/lib/sounds";
 
 interface NavbarProps {
   currentStudent: StudentProfile | null;
-  onSwitchStudent: () => void;
   onGoHome: () => void;
 }
 
-export function Navbar({
-  currentStudent,
-  onSwitchStudent,
-  onGoHome,
-}: NavbarProps) {
+export function Navbar({ currentStudent, onGoHome }: NavbarProps) {
   const [isMuted, setIsMuted] = useState(!soundEffects.enabled);
 
   const toggleSound = () => {
@@ -50,19 +45,19 @@ export function Navbar({
         </div>
       </div>
 
-      {/* Controls: Active Student Info, Sound Toggle */}
+      {/* Controls: Active User Badge & Sound Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Active Student Pill (Click to switch user) */}
+        {/* Active User Badge (Informational) */}
         {currentStudent && (
-          <button
-            onClick={onSwitchStudent}
-            className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] active:bg-white/[0.12] border border-white/10 transition-all cursor-pointer group touch-manipulation"
-            title="Click to switch profile"
+          <div
+            onClick={onGoHome}
+            className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 select-none cursor-pointer hover:bg-white/[0.08] transition-all"
+            title="Go to dashboard"
           >
             <span className="text-base sm:text-lg">{currentStudent.avatar}</span>
             <div className="flex flex-col text-left">
-              <span className="text-xs font-black text-white group-hover:text-cyan-300 transition-colors truncate max-w-[80px] sm:max-w-none">
-                {currentStudent.name.split(" ")[0]}
+              <span className="text-xs font-black text-white truncate max-w-[80px] sm:max-w-none">
+                {currentStudent.name}
               </span>
               <span className="text-[9px] text-white/50 font-semibold hidden xs:block">
                 Lvl {currentStudent.currentLessonId}
@@ -74,7 +69,7 @@ export function Navbar({
               <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-current" />
               <span>{currentStudent.streakDays || 0}d</span>
             </div>
-          </button>
+          </div>
         )}
 
         {/* Sound Toggle */}

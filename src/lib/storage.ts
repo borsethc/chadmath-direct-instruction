@@ -208,13 +208,37 @@ export function saveAllStudents(students: StudentProfile[]): void {
   }
 }
 
+export const USER_COOKIE_KEY = "chadmath_user_id";
+
+export function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+export function setCookie(name: string, value: string, days: number = 365): void {
+  if (typeof document === "undefined") return;
+  const maxAge = days * 24 * 60 * 60;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+}
+
 export function getActiveStudentId(): string {
+  // 1. Check persistent cookie first
+  const cookieId = getCookie(USER_COOKIE_KEY);
+  if (cookieId) return cookieId;
+
+  // 2. Fallback to localStorage and re-sync cookie
   const storage = getStorage();
   if (!storage) return "";
-  return storage.getItem(ACTIVE_STUDENT_KEY) || "";
+  const storedId = storage.getItem(ACTIVE_STUDENT_KEY) || "";
+  if (storedId) {
+    setCookie(USER_COOKIE_KEY, storedId);
+  }
+  return storedId;
 }
 
 export function setActiveStudentId(id: string): void {
+  setCookie(USER_COOKIE_KEY, id);
   const storage = getStorage();
   if (!storage) return;
   storage.setItem(ACTIVE_STUDENT_KEY, id);

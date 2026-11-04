@@ -16,6 +16,9 @@ import {
   setTeacherPin,
   verifyTeacherPin,
   hasTeacherPinSet,
+  getActiveStudentId,
+  setActiveStudentId,
+  USER_COOKIE_KEY,
 } from "../src/lib/storage.ts";
 
 console.log("🚀 Running ChadMath DI Acceptance Test Suite...");
@@ -182,7 +185,19 @@ setTeacherPin("4829");
 assert(hasTeacherPinSet(), `Teacher PIN is set after owner setup`);
 assert(verifyTeacherPin("4829"), `Teacher PIN verifies correctly`);
 assert(!verifyTeacherPin("9999"), `Default PIN 9999 is rejected`);
-assert(!verifyTeacherPin("1234"), `Incorrect PIN is rejected`);
+// 8. Acceptance Test: Cookie Installation & User Persistence
+global.document = {
+  cookie: "",
+};
+setActiveStudentId("student-cookie-test-123");
+assert(
+  document.cookie.includes("chadmath_user_id=student-cookie-test-123"),
+  `Cookie is installed when user is set (cookie: ${document.cookie})`
+);
+assert(
+  getActiveStudentId() === "student-cookie-test-123",
+  `Active student ID is remembered from cookie`
+);
 
 console.log("\n==========================================");
 if (testFailures === 0) {
