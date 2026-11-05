@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Volume2, VolumeX, Flame, GraduationCap } from "lucide-react";
+import { Volume2, VolumeX, Flame, GraduationCap, LogOut } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
 import { soundEffects } from "@/lib/sounds";
 
@@ -54,28 +54,41 @@ export function Navbar({
 
       {/* Controls: Active User Badge, Teacher Portal & Sound Toggle */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Active User Badge (Informational / Switch Profile) */}
+        {/* Active User Badge & Change User / Logout Button */}
         {currentStudent && (
-          <div
-            onClick={onSwitchStudent || onGoHome}
-            className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 select-none cursor-pointer hover:bg-white/[0.08] transition-all"
-            title="Click to switch profile"
-          >
-            <span className="text-base sm:text-lg">{currentStudent.avatar}</span>
-            <div className="flex flex-col text-left">
-              <span className="text-xs font-black text-white truncate max-w-[80px] sm:max-w-none">
-                {currentStudent.name}
-              </span>
-              <span className="text-[9px] text-white/50 font-semibold hidden xs:block">
-                Lvl {currentStudent.currentLessonId}
-              </span>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div
+              onClick={onSwitchStudent || onGoHome}
+              className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 select-none cursor-pointer hover:bg-white/[0.08] transition-all"
+              title="Click to switch profile"
+            >
+              <span className="text-base sm:text-lg">{currentStudent.avatar}</span>
+              <div className="flex flex-col text-left">
+                <span className="text-xs font-black text-white truncate max-w-[80px] sm:max-w-none">
+                  {currentStudent.name}
+                </span>
+                <span className="text-[9px] text-white/50 font-semibold hidden xs:block">
+                  Lvl {currentStudent.currentLessonId}
+                </span>
+              </div>
+
+              {/* Streak Flame */}
+              <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] sm:text-[10px] font-black ml-0.5">
+                <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-current" />
+                <span>{currentStudent.streakDays || 0}d</span>
+              </div>
             </div>
 
-            {/* Streak Flame */}
-            <div className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[9px] sm:text-[10px] font-black ml-0.5">
-              <Flame className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-amber-400 fill-current" />
-              <span>{currentStudent.streakDays || 0}d</span>
-            </div>
+            {onSwitchStudent && (
+              <button
+                onClick={onSwitchStudent}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 active:bg-rose-500/25 text-rose-300 hover:text-white border border-rose-500/30 hover:border-rose-400/50 text-xs font-black transition-all cursor-pointer touch-manipulation shrink-0"
+                title="Change user / Log out"
+              >
+                <LogOut className="w-4 h-4 text-rose-400" />
+                <span className="hidden sm:inline">Change User</span>
+              </button>
+            )}
           </div>
         )}
 

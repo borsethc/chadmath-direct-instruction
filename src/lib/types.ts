@@ -1,9 +1,28 @@
 export type DIPhase = "review" | "model" | "guided" | "fluency" | "checkout" | "complete";
 
+export interface StrategyStep {
+  label: string;       // e.g. "Double 4"
+  expression: string;  // e.g. "4 + 4 = 8"
+}
+
+export interface FactStrategy {
+  id: string;          // e.g. "double-add-one-group"
+  name: string;        // e.g. "Double, Then Add One More Group (×3)"
+  stepsFor: (groups: number, perGroup: number) => StrategyStep[];
+}
+
+export interface Fact {
+  groups: number;
+  perGroup: number;
+  product: number;
+  strategy: FactStrategy;
+}
+
 export interface MathFact {
   a: number; // Factor A (1..9)
   b: number; // Factor B (1..9)
   product: number;
+  strategy?: FactStrategy;
 }
 
 export interface FactMasteryRecord {

@@ -2,7 +2,7 @@
 // Comprehensive Acceptance Test Suite for November 4, 2026 Evaluation Criteria
 
 import { DI_LESSONS } from "../src/lib/lessons.ts";
-import { getDynamicRuleExplanation } from "../src/lib/ruleEngine.ts";
+import { getDynamicRuleExplanation, strategyFor, renderFact } from "../src/lib/ruleEngine.ts";
 import {
   generateEmptyFactMastery,
   getLessonMasteryFacts,
@@ -404,6 +404,148 @@ for (const lesson of DI_LESSONS) {
     distinctTargets.size >= 5,
     `Lesson ${lesson.id} (${lesson.title}) has at least 5 distinct target facts for gate (count: ${distinctTargets.size})`
   );
+}
+
+// 18. Check-question wording fix: Product-anchored questions across all lessons & no "other factor"
+assert(
+  l2_3.checkQuestion.prompt === "2 × 3 = 6. We got 6 by doubling a number. Which number did we double?",
+  `Lesson 2 (2 × 3) check question matches exact product-anchored pattern: "${l2_3.checkQuestion.prompt}"`
+);
+assert(
+  l2_3.checkQuestion.expectedAnswer === 3,
+  `Lesson 2 (2 × 3) check question expected answer is 3: ${l2_3.checkQuestion.expectedAnswer}`
+);
+for (const lesson of DI_LESSONS) {
+  const tf = lesson.targetFacts[0];
+  const exp = getDynamicRuleExplanation(lesson.id, tf.a, tf.b);
+  assert(
+    exp.checkQuestion.prompt.startsWith(`${tf.a} × ${tf.b} = ${tf.product}.`),
+    `Lesson ${lesson.id} check question starts with fact and product "${tf.a} × ${tf.b} = ${tf.product}.": "${exp.checkQuestion.prompt}"`
+  );
+  assert(
+    !exp.strategyOverview.toLowerCase().includes("other factor") &&
+      !exp.checkQuestion.prompt.toLowerCase().includes("other factor") &&
+      !exp.checkQuestion.hint.toLowerCase().includes("other factor"),
+    `Lesson ${lesson.id} never uses undefined "other factor"`
+  );
+}
+
+// 19. Count by 5s (×5) rewrite & removal of clock context
+const l3_5x3 = getDynamicRuleExplanation(3, 5, 3);
+assert(
+  l3_5x3.ruleName === "Count by 5s (×5)",
+  `Lesson 3 ruleName is "Count by 5s (×5)": "${l3_5x3.ruleName}"`
+);
+assert(
+  l3_5x3.strategyOverview.startsWith("What is 5 × 3?\nCount by 5s three times. Say 5, 10, 15.\nSo 5 × 3 = 15."),
+  `Lesson 3 explanation starts with "What is 5 × 3?" and counting steps`
+);
+assert(
+  l3_5x3.strategyOverview.includes(
+    "Look at the last digit.\nWhen you multiply 5 by an even number, the answer ends in 0. When you multiply 5 by an odd number, the answer ends in 5. Here, 3 is odd, and 15 ends in 5."
+  ),
+  `Lesson 3 explanation includes exact last-digit rule after counting steps`
+);
+assert(
+  !l3_5x3.strategyOverview.toLowerCase().includes("landmark numbers") &&
+    !l3_5x3.strategyOverview.toLowerCase().includes("progresses by 5s"),
+  `Lesson 3 explanation does not reintroduce "landmark numbers" or "progresses by 5s"`
+);
+assert(
+  l3_5x3.contextLeadIn === "" &&
+    !JSON.stringify(l3_5x3).toLowerCase().includes("clock") &&
+    !JSON.stringify(DI_LESSONS.find((l) => l.id === 3)).toLowerCase().includes("clock"),
+  `Lesson 3 has zero clock context anywhere`
+);
+
+// 20. Double, Then Add One More Group (×3) rewrite
+const lesson4 = DI_LESSONS.find((l) => l.id === 4);
+assert(
+  lesson4.ruleName === "Double, Then Add One More Group (×3)",
+  `Lesson 4 ruleName is "Double, Then Add One More Group (×3)": "${lesson4.ruleName}"`
+);
+assert(
+  lesson4.targetFacts[0].a === 3 && lesson4.targetFacts[0].b === 4,
+  `Lesson 4 first example is 3 × 4 (not 3 × 3): ${lesson4.targetFacts[0].a} × ${lesson4.targetFacts[0].b}`
+);
+const l4_3x4 = getDynamicRuleExplanation(4, 3, 4);
+assert(
+  l4_3x4.ruleName === "Double, Then Add One More Group (×3)",
+  `Lesson 4 explanation ruleName is "Double, Then Add One More Group (×3)"`
+);
+const expectedL4Text =
+  "How can you use doubling to find 3 × 4?\nThink of 3 × 4 as 3 groups of 4. Start with two groups, then add the third.\nDouble 4. Two groups of 4 make 8. 4 + 4 = 8\nAdd one more group of 4. 8 + 4 = 12\nSo 3 × 4 = 12.\n\nPicture it. There are 3 sections with 4 seats in each. The first two sections have 8 seats. The last section adds 4 more, for 12 seats in all.";
+assert(
+  l4_3x4.strategyOverview === expectedL4Text,
+  `Lesson 4 (3 × 4) explanation matches exact required text`
+);
+
+// 21. Strategy-follows-fact: stored on every fact, renderFact, orientation normalisation, review facts, staged checks
+for (const lesson of DI_LESSONS) {
+  for (const tf of lesson.targetFacts) {
+    assert(
+      tf.strategy && typeof tf.strategy.name === "string" && typeof tf.strategy.stepsFor === "function",
+      `Lesson ${lesson.id} target fact ${tf.a}×${tf.b} has strategy stored on the fact (${tf.strategy?.name})`
+    );
+  }
+  for (const rf of lesson.reviewFacts) {
+    assert(
+      rf.strategy && typeof rf.strategy.name === "string" && typeof rf.strategy.stepsFor === "function",
+      `Lesson ${lesson.id} review fact ${rf.a}×${rf.b} has its own strategy stored on the fact (${rf.strategy?.name})`
+    );
+  }
+}
+
+const rf3x4 = renderFact({ a: 3, b: 4, product: 12 });
+assert(
+  rf3x4.strategyName === "Double, Then Add One More Group (×3)" &&
+    rf3x4.steps.length === 2 &&
+    rf3x4.steps[0].label === "Double 4" &&
+    rf3x4.steps[0].expression === "4 + 4 = 8" &&
+    rf3x4.steps[1].label === "Add one more group of 4" &&
+    rf3x4.steps[1].expression === "8 + 4 = 12",
+  `renderFact(3 × 4) returns "Double, Then Add One More Group (×3)" with exact double & add-one-group steps`
+);
+
+// Orientation normalisation: 6 × 7 and 7 × 6 both resolve to 5-Group + 1 Rule (×6)
+assert(
+  strategyFor(6, 7).id === "five-plus-one-group" && strategyFor(7, 6).id === "five-plus-one-group",
+  `Orientation normalisation: both 6 × 7 and 7 × 6 resolve to 5-Group + 1 Rule (×6)`
+);
+
+// Review fact from another lesson shows its own strategy, never the current lesson's banner
+const l4Review2x6 = lesson4.reviewFacts.find((f) => f.a === 2 && f.b === 6);
+const l4Review5x3 = lesson4.reviewFacts.find((f) => f.a === 5 && f.b === 3);
+assert(
+  renderFact(l4Review2x6).strategyName === "The Double Rule (×2)" &&
+    renderFact(l4Review5x3).strategyName === "Count by 5s (×5)",
+  `Lesson 4 review facts (2 × 6, 5 × 3) show their own strategies, never Lesson 4's banner`
+);
+
+// Staged multi-step check for 3 × 4: Step 1 (2 groups of 4 -> 8), Step 2 (3 groups of 4 -> 12)
+assert(
+  l4_3x4.checkSteps.length === 2 &&
+    l4_3x4.checkSteps[0].visual.a === 2 &&
+    l4_3x4.checkSteps[0].visual.b === 4 &&
+    l4_3x4.checkSteps[0].expectedAnswer === 8 &&
+    l4_3x4.checkSteps[1].visual.a === 3 &&
+    l4_3x4.checkSteps[1].visual.b === 4 &&
+    l4_3x4.checkSteps[1].expectedAnswer === 12,
+  `Lesson 4 (3 × 4) check stages Step 1 (2×4=8) and Step 2 (3×4=12) separately`
+);
+
+// General rule: in every lesson's checkSteps, the visible groups total equals expectedAnswer
+for (const lesson of DI_LESSONS) {
+  const tf = lesson.targetFacts[0];
+  const exp = getDynamicRuleExplanation(lesson.id, tf.a, tf.b);
+  for (let idx = 0; idx < exp.checkSteps.length; idx++) {
+    const st = exp.checkSteps[idx];
+    const visualTotal = st.visual.a * st.visual.b;
+    assert(
+      visualTotal === st.expectedAnswer,
+      `Lesson ${lesson.id} checkStep ${idx + 1} visual (${st.visual.a}×${st.visual.b}=${visualTotal}) equals expectedAnswer (${st.expectedAnswer})`
+    );
+  }
 }
 
 console.log("\n==========================================");

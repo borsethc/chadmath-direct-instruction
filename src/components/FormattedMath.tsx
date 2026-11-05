@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import type { StrategyStep } from "@/lib/types";
 
 interface FormattedMathFactProps {
   a: number;
@@ -150,57 +151,87 @@ export function HighlightedStrategyText({
   factorB: number;
   product: number;
 }) {
+  const fullEqPattern = new RegExp(`(${factorA}\\s*[×x]\\s*${factorB}\\s*=\\s*${product})`, "g");
   const factPattern = new RegExp(`(${factorA}\\s*[×x]\\s*${factorB})`, "g");
   const groupsPattern = new RegExp(`(${factorA}\\s*groups?\\s*of\\s*${factorB})`, "gi");
   const totalPattern = new RegExp(`(total\\s+is\\s+)(${product})`, "gi");
 
   return (
-    <span className="text-xs sm:text-sm text-white/90 leading-relaxed font-medium">
-      {text.split(factPattern).map((chunk, i) => {
-        if (chunk.match(new RegExp(`^${factorA}\\s*[×x]\\s*${factorB}$`))) {
+    <span className="text-xs sm:text-sm text-white/90 leading-relaxed font-medium whitespace-pre-line">
+      {text.split(fullEqPattern).map((eqChunk, eqIdx) => {
+        if (eqChunk.match(new RegExp(`^${factorA}\\s*[×x]\\s*${factorB}\\s*=\\s*${product}$`))) {
           return (
             <span
-              key={i}
-              className="inline-flex items-center px-1.5 py-0.5 mx-1 rounded-md bg-white/10 border border-white/15 font-mono font-black text-sm sm:text-base align-middle shadow-sm"
+              key={eqIdx}
+              className="inline-flex items-center px-1.5 py-0.5 mx-0.5 rounded-md bg-white/10 border border-white/15 font-mono font-black text-sm sm:text-base align-middle shadow-sm"
             >
               <span className="text-sky-300">{factorA}</span>
               <span className="text-white/40 mx-0.5 font-bold">×</span>
               <span className="text-purple-300">{factorB}</span>
+              <span className="text-white/40 mx-0.5 font-bold">=</span>
+              <span className="text-amber-300 underline decoration-amber-300/40 underline-offset-2">
+                {product}
+              </span>
             </span>
           );
         }
 
         return (
-          <span key={i}>
-            {chunk.split(groupsPattern).map((gChunk, j) => {
-              const gMatch = gChunk.match(new RegExp(`^(${factorA})\\s*(groups?)\\s*of\\s*(${factorB})$`, "i"));
-              if (gMatch) {
+          <span key={eqIdx}>
+            {eqChunk.split(factPattern).map((chunk, i) => {
+              if (chunk.match(new RegExp(`^${factorA}\\s*[×x]\\s*${factorB}$`))) {
                 return (
-                  <span key={j} className="inline-flex items-center gap-1 font-bold">
-                    <span className="text-sky-300 font-black">{gMatch[1]} {gMatch[2]}</span>
-                    <span className="text-white/60">of</span>
-                    <span className="text-purple-300 font-black text-sm sm:text-base">{gMatch[3]}</span>
+                  <span
+                    key={i}
+                    className="inline-flex items-center px-1.5 py-0.5 mx-1 rounded-md bg-white/10 border border-white/15 font-mono font-black text-sm sm:text-base align-middle shadow-sm"
+                  >
+                    <span className="text-sky-300">{factorA}</span>
+                    <span className="text-white/40 mx-0.5 font-bold">×</span>
+                    <span className="text-purple-300">{factorB}</span>
                   </span>
                 );
               }
 
               return (
-                <span key={j}>
-                  {gChunk.split(totalPattern).map((tChunk, k) => {
-                    if (tChunk.toLowerCase().startsWith("total is")) {
-                      return <span key={k}>{tChunk}</span>;
-                    }
-                    if (tChunk === String(product)) {
+                <span key={i}>
+                  {chunk.split(groupsPattern).map((gChunk, j) => {
+                    const gMatch = gChunk.match(
+                      new RegExp(`^(${factorA})\\s*(groups?)\\s*of\\s*(${factorB})$`, "i")
+                    );
+                    if (gMatch) {
                       return (
-                        <span
-                          key={k}
-                          className="font-mono font-black text-sm sm:text-base text-amber-300 px-1 rounded bg-amber-500/10 border border-amber-500/20 underline decoration-amber-300/40 underline-offset-2 ml-0.5"
-                        >
-                          {product}
+                        <span key={j} className="inline-flex items-center gap-1 font-bold">
+                          <span className="text-sky-300 font-black">
+                            {gMatch[1]} {gMatch[2]}
+                          </span>
+                          <span className="text-white/60">of</span>
+                          <span className="text-purple-300 font-black text-sm sm:text-base">
+                            {gMatch[3]}
+                          </span>
                         </span>
                       );
                     }
-                    return tChunk;
+
+                    return (
+                      <span key={j}>
+                        {gChunk.split(totalPattern).map((tChunk, k) => {
+                          if (tChunk.toLowerCase().startsWith("total is")) {
+                            return <span key={k}>{tChunk}</span>;
+                          }
+                          if (tChunk === String(product)) {
+                            return (
+                              <span
+                                key={k}
+                                className="font-mono font-black text-sm sm:text-base text-amber-300 px-1 rounded bg-amber-500/10 border border-amber-500/20 underline decoration-amber-300/40 underline-offset-2 ml-0.5"
+                              >
+                                {product}
+                              </span>
+                            );
+                          }
+                          return tChunk;
+                        })}
+                      </span>
+                    );
                   })}
                 </span>
               );
@@ -222,6 +253,8 @@ export function HeadlineMathFactBanner({
   b,
   product,
   label,
+  strategyName,
+  steps,
   strategyText,
   repeatedAddition,
 }: {
@@ -229,6 +262,8 @@ export function HeadlineMathFactBanner({
   b: number;
   product?: number;
   label?: string;
+  strategyName?: string;
+  steps?: StrategyStep[];
   strategyText?: string;
   repeatedAddition?: string;
 }) {
@@ -253,13 +288,35 @@ export function HeadlineMathFactBanner({
         )}
       </div>
 
+      {/* Strategy Name directly under the fact */}
+      {strategyName && (
+        <span className="text-xs sm:text-sm font-black text-cyan-300 tracking-wide">
+          {strategyName}
+        </span>
+      )}
+
+      {/* Strategy Steps in order */}
+      {steps && steps.length > 0 && (
+        <div className="w-full flex flex-col gap-1 max-w-md">
+          {steps.map((st, idx) => (
+            <div
+              key={idx}
+              className="flex items-center justify-between gap-2 px-2.5 py-1 rounded-lg bg-black/50 border border-white/10 text-[11px] sm:text-xs"
+            >
+              <span className="font-bold text-white/85 text-left">{st.label}</span>
+              <FormattedEquation mathString={st.expression} factorA={a} factorB={b} size="sm" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {strategyText && (
         <div className="text-xs sm:text-sm font-semibold text-white/90 leading-snug max-w-md">
           <HighlightedStrategyText text={strategyText} factorA={a} factorB={b} product={product ?? a * b} />
         </div>
       )}
 
-      {repeatedAddition && (
+      {repeatedAddition && (!steps || steps.length === 0) && (
         <div className="text-[11px] sm:text-xs font-mono font-bold text-white/80 bg-black/50 px-3 py-1 rounded-lg border border-white/10 mt-0.5">
           <FormattedEquation mathString={repeatedAddition} factorA={a} factorB={b} size="sm" />
         </div>

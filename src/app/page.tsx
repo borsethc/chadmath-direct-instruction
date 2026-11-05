@@ -51,6 +51,13 @@ export default function Home() {
     setCurrentView("dashboard");
   };
 
+  const handleLogoutStudent = () => {
+    setActiveStudentId("");
+    setActiveStudent(null);
+    setStudents(loadAllStudents());
+    setCurrentView("login");
+  };
+
   const handleStartLesson = (lesson: DILesson) => {
     setActiveLesson(lesson);
     setCurrentView("lesson");
@@ -98,10 +105,7 @@ export default function Home() {
             setCurrentView("login");
           }
         }}
-        onSwitchStudent={() => {
-          setStudents(loadAllStudents());
-          setCurrentView("login");
-        }}
+        onSwitchStudent={handleLogoutStudent}
         onOpenTeacherPortal={handleOpenTeacherPortal}
       />
 
@@ -129,10 +133,7 @@ export default function Home() {
           <StudentDashboard
             student={activeStudent}
             onStartLesson={handleStartLesson}
-            onSwitchStudent={() => {
-              setStudents(loadAllStudents());
-              setCurrentView("login");
-            }}
+            onSwitchStudent={handleLogoutStudent}
             onOpenTeacherPortal={handleOpenTeacherPortal}
           />
         )}

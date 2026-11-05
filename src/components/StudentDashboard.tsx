@@ -17,6 +17,8 @@ import {
   Volume2,
   Type,
   AlertCircle,
+  LogOut,
+  Users,
 } from "lucide-react";
 import { StudentProfile, DILesson } from "@/lib/types";
 import { DI_LESSONS } from "@/lib/lessons";
@@ -123,8 +125,18 @@ export function StudentDashboard({
               </span>
             </div>
 
-            {/* Accessibility: Read Aloud & Font Toggle */}
+            {/* Accessibility & Change User Controls */}
             <div className="flex items-center gap-1.5">
+              {onSwitchStudent && (
+                <button
+                  onClick={onSwitchStudent}
+                  className="px-3 h-8 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 hover:border-rose-400/50 text-rose-300 hover:text-white flex items-center gap-1.5 transition-all cursor-pointer font-black text-xs"
+                  title="Log out or change user"
+                >
+                  <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Change User / Log Out</span>
+                </button>
+              )}
               <button
                 onClick={() =>
                   speakText(
@@ -443,9 +455,10 @@ export function StudentDashboard({
         {onSwitchStudent && (
           <button
             onClick={onSwitchStudent}
-            className="hover:text-cyan-400 font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-rose-500/15 text-white/80 hover:text-rose-300 border border-white/10 hover:border-rose-500/30 font-bold transition-all cursor-pointer flex items-center gap-2"
           >
-            <span>← Switch Profile</span>
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Change User / Log Out</span>
           </button>
         )}
         {onOpenTeacherPortal && (

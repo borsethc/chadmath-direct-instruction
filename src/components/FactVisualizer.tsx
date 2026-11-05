@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { LayoutGrid, Layers } from "lucide-react";
+import { renderFact } from "@/lib/ruleEngine";
 
 interface FactVisualizerProps {
   factorA: number; // Number of groups (rows)
@@ -10,6 +11,7 @@ interface FactVisualizerProps {
   showAnswer?: boolean;
   activeGroupIndex?: number | null; // For sequential model animation
   compact?: boolean;
+  hideAdditionBar?: boolean;
 }
 
 export function FactVisualizer({
@@ -18,6 +20,7 @@ export function FactVisualizer({
   showAnswer = true,
   activeGroupIndex = null,
   compact = false,
+  hideAdditionBar = false,
 }: FactVisualizerProps) {
   const [viewMode, setViewMode] = useState<"groups" | "array">("groups");
   const product = factorA * factorB;
@@ -140,20 +143,29 @@ export function FactVisualizer({
           </div>
         )}
 
-        {/* Repeated Addition Equation Bar with Light Purple addends and Gold Product */}
-        <div className="w-full pt-1 border-t border-white/5 flex items-center justify-center gap-1 flex-wrap text-[11px] sm:text-xs font-mono">
-          <span className="text-white/40 font-sans text-[10px]">Addition:</span>
-          {Array.from({ length: factorA }).map((_, idx) => (
-            <span key={idx} className="flex items-center">
-              {idx > 0 && <span className="text-white/40 mx-0.5">+</span>}
-              <span className="text-purple-300 font-bold">{factorB}</span>
-            </span>
-          ))}
-          <span className="text-white/40 mx-0.5">=</span>
-          <span className="text-amber-300 font-black">
-            {showAnswer ? product : "?"}
-          </span>
-        </div>
+        {/* Strategy Split Bar (Never plain repeated addition alone when a strategy split exists) */}
+        {!hideAdditionBar && (() => {
+          const rf = renderFact({ a: factorA, b: factorB, product });
+          return (
+            <div className="w-full pt-1 border-t border-white/5 flex items-center justify-center gap-2 flex-wrap text-[10px] sm:text-[11px] font-mono">
+              <span className="text-cyan-300 font-sans font-bold">{rf.strategyName}:</span>
+              {rf.steps.map((st, idx) => {
+                const expr = showAnswer
+                  ? st.expression
+                  : idx === rf.steps.length - 1
+                  ? st.expression.replace(new RegExp(`=\\s*${product}$`), "= ?").replace(new RegExp(`→\\s*${product}$`), "→ ?")
+                  : st.expression;
+                return (
+                  <span key={idx} className="inline-flex items-center gap-1 text-white/85">
+                    {idx > 0 && <span className="text-white/30">•</span>}
+                    <span className="text-white/60 font-sans">{st.label}:</span>
+                    <span className="text-purple-300 font-bold">{expr}</span>
+                  </span>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

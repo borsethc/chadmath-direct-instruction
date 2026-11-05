@@ -27,7 +27,12 @@ import {
   HeadlineMathFactBanner,
 } from "./FormattedMath";
 import { soundEffects } from "@/lib/sounds";
-import { getDynamicRuleExplanation, DynamicRuleExplanation } from "@/lib/ruleEngine";
+import {
+  getDynamicRuleExplanation,
+  DynamicRuleExplanation,
+  renderFact,
+  RenderedFactView,
+} from "@/lib/ruleEngine";
 import { recordFactAnswer, addToReDrillQueue, revertStudentToSnapshot } from "@/lib/storage";
 
 interface LessonEngineProps {
@@ -75,6 +80,14 @@ export function LessonEngine({
 
   // Active check-for-understanding question state for Phase 2 "I Do"
   const [checkExplanation, setCheckExplanation] = useState<DynamicRuleExplanation | null>(null);
+  const [checkStepIndex, setCheckStepIndex] = useState<number>(0);
+  const [checkFeedback, setCheckFeedback] = useState<string | null>(null);
+
+  // Post-submission Gate feedback (restates fact + strategy split after bare gate submission)
+  const [gateFeedback, setGateFeedback] = useState<{
+    rendered: RenderedFactView;
+    isCorrect: boolean;
+  } | null>(null);
 
   // Scaffold visibility controls (fading)
   const [showHintScaffold, setShowHintScaffold] = useState<boolean>(false);
@@ -186,11 +199,13 @@ export function LessonEngine({
   const handleStartModelCheck = () => {
     setPhase("model");
     setPhaseStepIndex(0);
+    setCheckStepIndex(0);
     const firstTarget = lesson.targetFacts[0];
     setCurrentFact(firstTarget);
     setCheckExplanation(getDynamicRuleExplanation(lesson.id, firstTarget.a, firstTarget.b));
     setTypedAnswer("");
     setErrorMessage(null);
+    setCheckFeedback(null);
     questionStartTimeRef.current = Date.now();
   };
 
@@ -203,6 +218,7 @@ export function LessonEngine({
     setCurrentFact(pool[0]);
     setTypedAnswer("");
     setErrorMessage(null);
+    setCheckFeedback(null);
     setShowHintScaffold(false);
     setHintUsedOnCurrentFact(false);
     questionStartTimeRef.current = Date.now();
@@ -285,20 +301,35 @@ export function LessonEngine({
       const responseTime = Date.now() - questionStartTimeRef.current;
       setTotalAttempts((prev) => prev + 1);
 
-      // Phase: "model" Check-for-Understanding Screen (Scored only as the check!)
+      // Phase: "model" Check-for-Understanding Screen (Staged one step at a time!)
       if (phase === "model") {
-        const expected = checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product;
-        if (answerNum === expected) {
+        const checkSteps = checkExplanation?.checkSteps || [];
+        const activeStep = checkSteps[checkStepIndex] || {
+          prompt: checkExplanation?.checkQuestion.prompt || "",
+          expectedAnswer: checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product,
+          hint: checkExplanation?.checkQuestion.hint || "Correct!",
+          visual: checkExplanation?.checkQuestionVisual || { a: currentFact.a, b: currentFact.b },
+        };
+
+        if (answerNum === activeStep.expectedAnswer) {
           soundEffects.playCorrect(1);
-          setTypedAnswer("");
           setErrorMessage(null);
-          // Advance to Warm-Up Practice
-          startWarmUpPhase();
+          setCheckFeedback(activeStep.hint || "Correct!");
+          const nextStepIdx = checkStepIndex + 1;
+          setTimeout(() => {
+            setTypedAnswer("");
+            setCheckFeedback(null);
+            if (nextStepIdx < checkSteps.length) {
+              setCheckStepIndex(nextStepIdx);
+              questionStartTimeRef.current = Date.now();
+            } else {
+              startWarmUpPhase();
+            }
+          }, 1200);
         } else {
           soundEffects.playIncorrect();
-          setErrorMessage(
-            checkExplanation?.checkQuestion.hint || "Review the rule and try again!"
-          );
+          setCheckFeedback(null);
+          setErrorMessage(activeStep.hint || "Review the step and try again!");
           setTypedAnswer(""); // Clear wrong entry automatically
         }
         return;
@@ -344,41 +375,48 @@ export function LessonEngine({
           }
         }
 
+        // After submission in Gate, restate fact + strategy split (never product alone)
+        const renderedGateFact = renderFact(currentFact, lesson.id);
+        setGateFeedback({ rendered: renderedGateFact, isCorrect });
+
         const nextIndex = phaseStepIndex + 1;
-        if (nextIndex < checkoutFacts.length) {
-          setPhaseStepIndex(nextIndex);
-          setCurrentFact(checkoutFacts[nextIndex]);
-          setTypedAnswer("");
-          setErrorMessage(null);
-          questionStartTimeRef.current = Date.now();
-        } else {
-          // Checkout complete! Gate pass decided by accuracy first (4+/5 or >=80%)
-          const correctNum = updatedResults.filter((r) => r.isCorrect).length;
-          const avgLatency = Math.round(
-            updatedResults.reduce((sum, r) => sum + r.latencyMs, 0) / updatedResults.length
-          );
-
-          const isMastered = correctNum >= 4; // 4/5 or 5/5
-          const speedMet = avgLatency <= 3500;
-          const stars: 1 | 2 | 3 = isMastered ? 3 : (correctNum / updatedResults.length) >= 0.75 ? 2 : 1;
-
-          setCheckoutFinalScore({
-            correct: correctNum,
-            total: updatedResults.length,
-            averageLatencyMs: avgLatency,
-            passed: isMastered,
-            speedGoalMet: speedMet,
-            starsEarned: stars,
-          });
-
-          if (isMastered) {
-            soundEffects.playFanfare();
+        setTimeout(() => {
+          setGateFeedback(null);
+          if (nextIndex < checkoutFacts.length) {
+            setPhaseStepIndex(nextIndex);
+            setCurrentFact(checkoutFacts[nextIndex]);
+            setTypedAnswer("");
+            setErrorMessage(null);
+            questionStartTimeRef.current = Date.now();
           } else {
-            soundEffects.playIncorrect();
-          }
+            // Checkout complete! Gate pass decided by accuracy first (4+/5 or >=80%)
+            const correctNum = updatedResults.filter((r) => r.isCorrect).length;
+            const avgLatency = Math.round(
+              updatedResults.reduce((sum, r) => sum + r.latencyMs, 0) / updatedResults.length
+            );
 
-          setPhase("complete");
-        }
+            const isMastered = correctNum >= 4; // 4/5 or 5/5
+            const speedMet = avgLatency <= 3500;
+            const stars: 1 | 2 | 3 = isMastered ? 3 : (correctNum / updatedResults.length) >= 0.75 ? 2 : 1;
+
+            setCheckoutFinalScore({
+              correct: correctNum,
+              total: updatedResults.length,
+              averageLatencyMs: avgLatency,
+              passed: isMastered,
+              speedGoalMet: speedMet,
+              starsEarned: stars,
+            });
+
+            if (isMastered) {
+              soundEffects.playFanfare();
+            } else {
+              soundEffects.playIncorrect();
+            }
+
+            setPhase("complete");
+          }
+        }, 1400);
         return;
       }
 
@@ -620,8 +658,21 @@ export function LessonEngine({
     }
   };
 
-  // Current fact explanation for We Do & Re-teaching banners
-  const currentFactExpl = getDynamicRuleExplanation(lesson.id, currentFact.a, currentFact.b);
+  // Current fact explanation & strategy-follows-fact view
+  // Review facts always resolve their own lesson's strategy (never borrowing the current lesson's banner)
+  const effectiveLessonForFact = phase === "review" ? undefined : lesson.id;
+  const currentFactExpl = getDynamicRuleExplanation(
+    effectiveLessonForFact ?? currentFact.a,
+    currentFact.a,
+    currentFact.b
+  );
+  const currentRenderedFact = renderFact(currentFact, effectiveLessonForFact);
+  const activeCheckStep = checkExplanation?.checkSteps?.[checkStepIndex] || {
+    prompt: checkExplanation?.checkQuestion.prompt || "",
+    expectedAnswer: checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product,
+    hint: checkExplanation?.checkQuestion.hint || "",
+    visual: checkExplanation?.checkQuestionVisual || { a: currentFact.a, b: currentFact.b },
+  };
 
   return (
     <div
@@ -740,22 +791,29 @@ export function LessonEngine({
           />
         </div>
 
-        {/* P0: PERSISTENT VISIBLE STRATEGY HEADER (Stays on every step of every lesson) */}
-        <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
-          <span className="truncate">
-            {phase === "review" ? (
-              <>
-                <span className="text-amber-400 uppercase font-black tracking-wider text-[10px]">Warm-Up Review: </span>
-                {currentFactExpl ? currentFactExpl.ruleName : "Direct Retrieval"}
-              </>
-            ) : (
-              <>
-                <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
-                {lesson.ruleName} — {lesson.ruleSummary}
-              </>
-            )}
-          </span>
-        </div>
+        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check and during bare Gate while answering) */}
+        {phase !== "model" && (phase !== "checkout" || Boolean(gateFeedback)) && (
+          <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
+            <span className="truncate">
+              {phase === "review" ? (
+                <>
+                  <span className="text-amber-400 uppercase font-black tracking-wider text-[10px]">Warm-Up Review: </span>
+                  {currentRenderedFact.strategyName} ({currentRenderedFact.steps.map((s) => s.label).join(" → ")})
+                </>
+              ) : phase === "strategy_intro" && lesson.id === 11 ? (
+                <>
+                  <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
+                  {lesson.ruleName} — {lesson.ruleSummary}
+                </>
+              ) : (
+                <>
+                  <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
+                  {currentRenderedFact.strategyName} — {currentRenderedFact.steps.map((s) => `${s.label} (${s.expression})`).join(", then ")}
+                </>
+              )}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* WORKSPACE CONTENT AREA (Optimized for iPhone 17 402x874 portrait with zero vertical scroll) */}
@@ -773,38 +831,45 @@ export function LessonEngine({
               b={currentFact.b}
               product={currentFact.product}
               label={checkExplanation.ruleName}
-              strategyText={checkExplanation.conclusion || checkExplanation.strategyOverview}
-              repeatedAddition={checkExplanation.repeatedAddition}
+              strategyName={lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.ruleName}
+              strategyText={checkExplanation.strategyOverview}
+              repeatedAddition={
+                lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.repeatedAddition
+              }
             />
 
-            {/* Context Lead-In */}
-            <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
-              <span className="font-bold text-cyan-300">Context: </span>
-              {checkExplanation.contextLeadIn}
-            </div>
+            {/* Context Lead-In (Only rendered when non-empty; omitted in Lesson 3 ×5 & Lesson 4 ×3) */}
+            {checkExplanation.contextLeadIn && (
+              <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
+                <span className="font-bold text-cyan-300">Context: </span>
+                {checkExplanation.contextLeadIn}
+              </div>
+            )}
 
-            {/* Worked Example Steps */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
-                Worked Example Steps:
-              </span>
-              {checkExplanation.steps.slice(0, 2).map((st) => (
-                <div
-                  key={st.stepNumber}
-                  className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
-                >
-                  <span className="font-bold text-white/80 text-[11px]">
-                    Step {st.stepNumber}: {st.label}
-                  </span>
-                  <FormattedEquation
-                    mathString={st.math}
-                    factorA={currentFact.a}
-                    factorB={currentFact.b}
-                    size="sm"
-                  />
-                </div>
-              ))}
-            </div>
+            {/* Worked Example Steps (Omitted in Lesson 3 ×5 & Lesson 4 ×3 where the full worked sequence is in the main explanation) */}
+            {lesson.id !== 3 && lesson.id !== 4 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
+                  Worked Example Steps:
+                </span>
+                {checkExplanation.steps.slice(0, 2).map((st) => (
+                  <div
+                    key={st.stepNumber}
+                    className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
+                  >
+                    <span className="font-bold text-white/80 text-[11px]">
+                      Step {st.stepNumber}: {st.label}
+                    </span>
+                    <FormattedEquation
+                      mathString={st.math}
+                      factorA={currentFact.a}
+                      factorB={currentFact.b}
+                      size="sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <button
               onClick={handleStartModelCheck}
@@ -815,48 +880,56 @@ export function LessonEngine({
             </button>
           </motion.div>
         ) : phase === "model" && checkExplanation ? (
-          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Separate screen & separate scoring from drill) */
+          /* PHASE 2: "I DO" STAGED CHECK-FOR-UNDERSTANDING (Reveals one step at a time; visual always totals expectedAnswer) */
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3 flex flex-col items-center gap-2 text-center my-auto"
+            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3.5 flex flex-col items-center gap-2.5 text-center my-auto"
           >
-            {/* Headline Fact Banner pairing fact with strategy */}
-            <HeadlineMathFactBanner
-              a={currentFact.a}
-              b={currentFact.b}
-              product={currentFact.product}
-              label="Check: Strategy Step"
-              strategyText={`Strategy: ${checkExplanation.strategyOverview}`}
-              repeatedAddition={checkExplanation.repeatedAddition}
-            />
+            {checkExplanation.checkSteps && checkExplanation.checkSteps.length > 1 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
+                Step {checkStepIndex + 1} of {checkExplanation.checkSteps.length}
+              </span>
+            )}
 
-            {/* Conceptual Question Prompt (Separate from drill fact) */}
-            <div className="px-3 py-1.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-200 text-xs sm:text-sm font-bold w-full">
-              {checkExplanation.checkQuestion.prompt}
-            </div>
-
-            {/* Scaffold Visualizer */}
-            <div className="w-full max-h-[120px] overflow-hidden">
-              <FactVisualizer
-                factorA={checkExplanation.checkQuestionVisual?.a ?? currentFact.a}
-                factorB={checkExplanation.checkQuestionVisual?.b ?? currentFact.b}
-                showAnswer={false}
-                compact={true}
+            {/* 1. Staged Check Question */}
+            <div className="px-3.5 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-100 text-xs sm:text-sm font-bold w-full leading-relaxed">
+              <HighlightedStrategyText
+                text={activeCheckStep.prompt}
+                factorA={currentFact.a}
+                factorB={currentFact.b}
+                product={currentFact.product}
               />
             </div>
 
-            {/* Conceptual Answer Box */}
+            {/* 2. Groups Visual (Totals exactly activeCheckStep.expectedAnswer; no addition/hint bar during the check) */}
+            <div className="w-full max-h-[135px] overflow-hidden">
+              <FactVisualizer
+                factorA={activeCheckStep.visual.a}
+                factorB={activeCheckStep.visual.b}
+                showAnswer={false}
+                compact={true}
+                hideAdditionBar={true}
+              />
+            </div>
+
+            {/* 3. Answer Box */}
             <div
               className={`w-18 h-12 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl tracking-tight transition-all ${
                 errorMessage
                   ? "bg-rose-950/70 border-rose-500 text-rose-300"
+                  : checkFeedback
+                  ? "bg-emerald-950/80 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
                   : "bg-black/80 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
               }`}
             >
               {typedAnswer || "?"}
             </div>
 
+            {/* Post-submission feedback (shown ONLY after learner submits an answer) */}
+            {checkFeedback && (
+              <span className="text-xs text-emerald-300 font-bold px-2">{checkFeedback}</span>
+            )}
             {errorMessage && (
               <span className="text-xs text-rose-300 font-bold px-2">{errorMessage}</span>
             )}
@@ -935,21 +1008,27 @@ export function LessonEngine({
                   </div>
                 </div>
 
-                {/* Facts Mastered Grid Review with Light Blue, Light Purple, Gold Colors */}
-                <div className="w-full flex items-center justify-center gap-2 flex-wrap pt-1">
-                  {checkoutResults.map((r, i) => (
-                    <div
-                      key={i}
-                      className="px-2 py-1 rounded-lg bg-black/40 border border-white/10 flex items-center gap-1 text-xs"
-                    >
-                      <FormattedMathFact
-                        a={r.fact.a}
-                        b={r.fact.b}
-                        product={r.fact.product}
-                        size="sm"
-                      />
-                    </div>
-                  ))}
+                {/* Gate Review: Restates each fact + strategy split (never product alone) */}
+                <div className="w-full flex flex-col gap-1.5 pt-1 max-h-[160px] overflow-y-auto">
+                  {checkoutResults.map((r, i) => {
+                    const rf = renderFact(r.fact, lesson.id);
+                    return (
+                      <div
+                        key={i}
+                        className="px-2.5 py-1.5 rounded-xl bg-black/40 border border-white/10 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <FormattedMathFact
+                          a={r.fact.a}
+                          b={r.fact.b}
+                          product={r.fact.product}
+                          size="sm"
+                        />
+                        <span className="text-[10px] text-cyan-300 font-bold truncate">
+                          {rf.strategyName}: {rf.steps.map((s) => s.expression).join(" → ")}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <button
@@ -1011,22 +1090,33 @@ export function LessonEngine({
               </div>
             )}
 
-            {/* In "We Do" (guided), pair the fact with strategy in headline banner */}
-            {phase === "guided" && (
+            {/* In "Warm-Up Review" (review), show the review fact's OWN strategy (never borrowing the current lesson's banner) */}
+            {phase === "review" && !isErrorCorrecting && (
+              <HeadlineMathFactBanner
+                a={currentFact.a}
+                b={currentFact.b}
+                label="Warm-Up Review"
+                strategyName={currentRenderedFact.strategyName}
+                steps={currentRenderedFact.steps}
+              />
+            )}
+
+            {/* In "We Do" (guided), pair the fact with ITS strategy name and steps */}
+            {phase === "guided" && !isErrorCorrecting && (
               <HeadlineMathFactBanner
                 a={currentFact.a}
                 b={currentFact.b}
                 product={currentFact.product}
                 label="We Do — Guided"
-                strategyText={`Strategy: ${currentFactExpl.strategyOverview}`}
-                repeatedAddition={currentFactExpl.repeatedAddition}
+                strategyName={currentRenderedFact.strategyName}
+                steps={currentRenderedFact.steps}
               />
             )}
 
-            {/* In "Fluency" with hint requested, show hint banner */}
+            {/* In "Fluency", show THAT fact's strategy name and toggleable Strategy Hint */}
             {phase === "fluency" && (
               <div className="flex items-center gap-2 text-[11px] text-white/60">
-                <span className="font-bold text-amber-300">{lesson.ruleName}</span>
+                <span className="font-bold text-amber-300">{currentRenderedFact.strategyName}</span>
                 <button
                   onClick={() => {
                     setShowHintScaffold((prev) => !prev);
@@ -1040,26 +1130,38 @@ export function LessonEngine({
               </div>
             )}
 
-            {phase === "fluency" && showHintScaffold && (
+            {phase === "fluency" && showHintScaffold && !isErrorCorrecting && (
               <HeadlineMathFactBanner
                 a={currentFact.a}
                 b={currentFact.b}
                 product={currentFact.product}
                 label="Fluency Strategy Hint"
-                strategyText={`Strategy: ${currentFactExpl.strategyOverview}`}
-                repeatedAddition={currentFactExpl.repeatedAddition}
+                strategyName={currentRenderedFact.strategyName}
+                steps={currentRenderedFact.steps}
               />
             )}
 
-            {/* Error Re-Teaching Banner: Headlines the fact with light blue, light purple, gold */}
+            {/* Error Re-Teaching Banner: Re-teaches THIS fact with ITS strategy split */}
             {isErrorCorrecting && correctionExplanation && (
               <HeadlineMathFactBanner
                 a={currentFact.a}
                 b={currentFact.b}
                 product={currentFact.product}
                 label="Re-Teaching Fact"
-                strategyText={`Strategy: ${correctionExplanation.strategyOverview}`}
-                repeatedAddition={correctionExplanation.repeatedAddition}
+                strategyName={currentRenderedFact.strategyName}
+                steps={currentRenderedFact.steps}
+              />
+            )}
+
+            {/* Gate Post-Submission Feedback Banner: Restates fact + strategy split AFTER submission */}
+            {phase === "checkout" && gateFeedback && (
+              <HeadlineMathFactBanner
+                a={gateFeedback.rendered.groups}
+                b={gateFeedback.rendered.perGroup}
+                product={gateFeedback.rendered.product}
+                label={gateFeedback.isCorrect ? "Gate Feedback — Correct!" : "Gate Feedback — Strategy Review"}
+                strategyName={gateFeedback.rendered.strategyName}
+                steps={gateFeedback.rendered.steps}
               />
             )}
 

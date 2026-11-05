@@ -1,3 +1,7 @@
+import type { StrategyStep, FactStrategy, Fact } from "./types.ts";
+
+export type { StrategyStep, FactStrategy, Fact };
+
 export interface DynamicRuleStep {
   stepNumber: number;
   label: string;
@@ -11,6 +15,13 @@ export interface CheckQuestion {
   hint: string;
 }
 
+export interface StagedCheckStep {
+  prompt: string;
+  expectedAnswer: number;
+  hint: string;
+  visual: { a: number; b: number };
+}
+
 export interface DynamicRuleExplanation {
   lessonId: number;
   ruleName: string;
@@ -21,13 +32,262 @@ export interface DynamicRuleExplanation {
   conclusion: string;
   checkQuestion: CheckQuestion;
   checkQuestionVisual?: { a: number; b: number };
+  checkSteps: StagedCheckStep[];
   commutativityNote?: string;
   repeatedAddition: string;
 }
 
 /**
+ * Strategy Registry — Strategy travels with the fact across all screens and lessons.
+ * Note on orientation: each strategy normalises the non-anchor factor so both
+ * (a × b) and (b × a) resolve cleanly while rendering steps for that exact fact.
+ */
+export const strategies: Record<string, FactStrategy> = {
+  zero: {
+    id: "zero",
+    name: "Zero Property",
+    stepsFor: (g, n) => [
+      { label: "Zero groups", expression: `${g} × ${n} = 0` },
+    ],
+  },
+  identity: {
+    id: "identity",
+    name: "The Identity Rule (×1)",
+    stepsFor: (g, n) => {
+      const other = g === 1 ? n : g;
+      return [
+        {
+          label: g === 1 && n === 1 ? "1 group of 1" : `1 group of ${other}`,
+          expression: `${g} × ${n} = ${other}`,
+        },
+      ];
+    },
+  },
+  double: {
+    id: "double",
+    name: "The Double Rule (×2)",
+    stepsFor: (g, n) => {
+      const other = g === 2 ? n : g;
+      return [
+        { label: `Double ${other}`, expression: `${other} + ${other} = ${2 * other}` },
+      ];
+    },
+  },
+  countBy5s: {
+    id: "count-by-5s",
+    name: "Count by 5s (×5)",
+    stepsFor: (g, n) => {
+      const other = g === 5 ? n : g;
+      const seq = Array.from({ length: other }, (_, i) => (i + 1) * 5).join(", ");
+      return [
+        { label: `Count by 5s ${other} times`, expression: `${seq} = ${5 * other}` },
+      ];
+    },
+  },
+  doubleAddOneGroup: {
+    id: "double-add-one-group",
+    name: "Double, Then Add One More Group (×3)",
+    // 3 × n = 2 × n + n. The 2 × n is the doubling step —
+    // that is why a 2 × ? fact appears when working on 3s.
+    stepsFor: (g, n) => {
+      const other = g === 3 ? n : g;
+      return [
+        { label: `Double ${other}`, expression: `${other} + ${other} = ${2 * other}` },
+        { label: `Add one more group of ${other}`, expression: `${2 * other} + ${other} = ${3 * other}` },
+      ];
+    },
+  },
+  doubleDouble: {
+    id: "double-double",
+    name: "Double-Double Strategy (×4)",
+    stepsFor: (g, n) => {
+      const other = g === 4 ? n : g;
+      return [
+        { label: `Double ${other}`, expression: `${other} + ${other} = ${2 * other}` },
+        { label: "Double again", expression: `${2 * other} + ${2 * other} = ${4 * other}` },
+      ];
+    },
+  },
+  ninesPattern: {
+    id: "nines-pattern",
+    name: "The 9s Secret Pattern (×9)",
+    stepsFor: (g, n) => {
+      const other = g === 9 ? n : g;
+      const tens = other - 1;
+      const ones = 9 - tens;
+      return [
+        { label: `Tens digit (1 less than ${other})`, expression: `${other} - 1 = ${tens}` },
+        { label: "Ones digit (adds to 9)", expression: `9 - ${tens} = ${ones} → ${9 * other}` },
+      ];
+    },
+  },
+  squares: {
+    id: "perfect-squares",
+    name: "Perfect Square Numbers Anchor",
+    stepsFor: (g, n) => [
+      { label: `Square array (${g} rows of ${n})`, expression: `${g} × ${n} = ${g * n}` },
+    ],
+  },
+  fivePlusOneGroup: {
+    id: "five-plus-one-group",
+    name: "5-Group + 1 Rule (×6)",
+    stepsFor: (g, n) => {
+      const other = g === 6 ? n : g;
+      return [
+        { label: `5 groups of ${other}`, expression: `5 × ${other} = ${5 * other}` },
+        { label: `Add one more group of ${other}`, expression: `${5 * other} + ${other} = ${6 * other}` },
+      ];
+    },
+  },
+  tripleDouble: {
+    id: "triple-double",
+    name: "Triple-Double Strategy (×8)",
+    stepsFor: (g, n) => {
+      const other = g === 8 ? n : g;
+      const d1 = 2 * other;
+      const d2 = 4 * other;
+      return [
+        { label: `Double ${other}`, expression: `${other} + ${other} = ${d1}` },
+        { label: `Double again (${d1})`, expression: `${d1} + ${d1} = ${d2}` },
+        { label: `Double a third time (${d2})`, expression: `${d2} + ${d2} = ${8 * other}` },
+      ];
+    },
+  },
+  summitFact: {
+    id: "summit-5678",
+    name: "5-6-7-8 Rhyme Mnemonic & Decomposition",
+    stepsFor: (g, n) => {
+      const other = g === 7 ? n : g;
+      return [
+        { label: `5 groups of ${other}`, expression: `5 × ${other} = ${5 * other}` },
+        { label: `Add 2 groups of ${other}`, expression: `${5 * other} + ${2 * other} = ${7 * other}` },
+      ];
+    },
+  },
+  fivePlusTwoGroups: {
+    id: "five-plus-two-groups",
+    name: "5-Group + 2-Group Rule (×7)",
+    stepsFor: (g, n) => {
+      const other = g === 7 ? n : g;
+      return [
+        { label: `5 groups of ${other}`, expression: `5 × ${other} = ${5 * other}` },
+        { label: `Add 2 groups of ${other}`, expression: `${5 * other} + ${2 * other} = ${7 * other}` },
+      ];
+    },
+  },
+};
+
+/**
+ * Lookup the strategy for any (groups, perGroup) fact.
+ * Never returns a generic "Mixed Retrieval" banner — mixed lessons and review facts
+ * always resolve to the strategy for THAT specific fact.
+ */
+export function strategyFor(groups: number, perGroup: number, lessonId?: number): FactStrategy {
+  if (groups === 0 || perGroup === 0) return strategies.zero;
+  if (groups === 1 || perGroup === 1) return strategies.identity;
+
+  // Lesson-specific disambiguation when the fact is a target of that lesson
+  if (lessonId === 7 && groups === perGroup) return strategies.squares;
+  if (lessonId === 9 && (groups === 8 || perGroup === 8)) return strategies.tripleDouble;
+  if (lessonId === 10 && ((groups === 7 && perGroup === 8) || (groups === 8 && perGroup === 7))) {
+    return strategies.summitFact;
+  }
+
+  // Primary lookup by leading factor (groups), then normalised orientation
+  if (groups === 3) return strategies.doubleAddOneGroup;
+  if (groups === 4) return strategies.doubleDouble;
+  if (groups === 5) return strategies.countBy5s;
+  if (groups === 2) return strategies.double;
+
+  if (groups === perGroup && (groups === 7 || lessonId === 7 || lessonId === 10 || lessonId === 11 || !lessonId)) {
+    return strategies.squares;
+  }
+
+  if (groups === 9) return strategies.ninesPattern;
+  if (groups === 6) return strategies.fivePlusOneGroup;
+
+  if (groups === 8) {
+    if (perGroup === 7 && lessonId === 10) return strategies.summitFact;
+    return strategies.tripleDouble;
+  }
+
+  if (groups === 7) {
+    if (perGroup === 8) return strategies.summitFact;
+    // Normalise orientation: e.g. 7 × 6 resolves to 5-Group + 1 Rule (×6), 7 × 3 resolves to ×3
+    if (perGroup === 2) return strategies.double;
+    if (perGroup === 3) return strategies.doubleAddOneGroup;
+    if (perGroup === 4) return strategies.doubleDouble;
+    if (perGroup === 5) return strategies.countBy5s;
+    if (perGroup === 6 && lessonId !== 10) return strategies.fivePlusOneGroup;
+    if (perGroup === 9 && lessonId !== 10) return strategies.ninesPattern;
+    return strategies.fivePlusTwoGroups;
+  }
+
+  // Fallback orientation normalisation if perGroup carries the strategy anchor
+  if (perGroup === 5) return strategies.countBy5s;
+  if (perGroup === 2) return strategies.double;
+  if (perGroup === 3) return strategies.doubleAddOneGroup;
+  if (perGroup === 4) return strategies.doubleDouble;
+  if (perGroup === 6) return strategies.fivePlusOneGroup;
+  if (perGroup === 9) return strategies.ninesPattern;
+  if (perGroup === 8) return strategies.tripleDouble;
+  if (perGroup === 7) return strategies.fivePlusTwoGroups;
+
+  throw new Error(`No strategy registered for ${groups} × ${perGroup}`);
+}
+
+export function createFact(groups: number, perGroup: number, lessonId?: number): Fact {
+  return {
+    groups,
+    perGroup,
+    product: groups * perGroup,
+    strategy: strategyFor(groups, perGroup, lessonId),
+  };
+}
+
+export interface RenderedFactView {
+  groups: number;
+  perGroup: number;
+  product: number;
+  headline: string;
+  strategyName: string;
+  steps: StrategyStep[];
+  summaryLine: string;
+}
+
+/**
+ * Render fact + strategy together everywhere (overview, I Do, We Do, Sprint hints,
+ * re-teach panels, and gate feedback after submission).
+ */
+export function renderFact(
+  fact: Fact | { a: number; b: number; product?: number; strategy?: FactStrategy },
+  lessonId?: number
+): RenderedFactView {
+  const groups = "groups" in fact ? fact.groups : fact.a;
+  const perGroup = "perGroup" in fact ? fact.perGroup : fact.b;
+  const product = fact.product ?? groups * perGroup;
+  const strategy =
+    "strategy" in fact && fact.strategy
+      ? fact.strategy
+      : strategyFor(groups, perGroup, lessonId);
+  const steps = strategy.stepsFor(groups, perGroup);
+  const summaryLine = `${groups} × ${perGroup} = ${product}. ${steps
+    .map((s) => `${s.label} (${s.expression})`)
+    .join(", then ")}.`;
+
+  return {
+    groups,
+    perGroup,
+    product,
+    headline: `${groups} × ${perGroup} = ${product}`,
+    strategyName: strategy.name,
+    steps,
+    summaryLine,
+  };
+}
+
+/**
  * Determines the primary mathematical strategy for a given fact.
- * Each fact is taught and explained using its own authentic strategy.
  */
 function resolveStrategyType(
   lessonId: number,
@@ -46,38 +306,39 @@ function resolveStrategyType(
   | "six"
   | "eight"
   | "seven"
-  | "mixed"
-  | "general" {
-  if (factorA === 0 || factorB === 0) return "zero";
-  if (factorA === 1 || factorB === 1) return "one";
-
-  // Lesson 11 is always Mixed Retrieval
+  | "mixed" {
+  // Lesson 11 overview uses "mixed"
   if (lessonId === 11) return "mixed";
 
-  // Lesson 9 is strictly Triple-Double for all x8 facts (never hijacked by summit rhyme)
-  if (lessonId === 9 && (factorA === 8 || factorB === 8)) return "eight";
-
-  // Lesson 10 is the designated home for the 5-6-7-8 rhyme & decomposition anchor
-  if (lessonId === 10 && ((factorA === 7 && factorB === 8) || (factorA === 8 && factorB === 7))) {
-    return "summit";
+  const strat = strategyFor(factorA, factorB, lessonId);
+  switch (strat.id) {
+    case "zero":
+      return "zero";
+    case "identity":
+      return "one";
+    case "double":
+      return "two";
+    case "count-by-5s":
+      return "five";
+    case "double-add-one-group":
+      return "three";
+    case "double-double":
+      return "four";
+    case "nines-pattern":
+      return "nine";
+    case "perfect-squares":
+      return "square";
+    case "five-plus-one-group":
+      return "six";
+    case "triple-double":
+      return "eight";
+    case "summit-5678":
+      return "summit";
+    case "five-plus-two-groups":
+      return "seven";
+    default:
+      return "mixed";
   }
-
-  // Squares
-  if (factorA === factorB && (lessonId === 7 || (factorA >= 5 && lessonId !== 8 && lessonId !== 9 && lessonId !== 10))) {
-    return "square";
-  }
-
-  // Standard family strategies
-  if (factorA === 2 || factorB === 2) return "two";
-  if (factorA === 5 || factorB === 5) return "five";
-  if (factorA === 3 || factorB === 3) return "three";
-  if (factorA === 4 || factorB === 4) return "four";
-  if (factorA === 9 || factorB === 9) return "nine";
-  if (factorA === 6 || factorB === 6) return "six";
-  if (factorA === 8 || factorB === 8) return "eight";
-  if (factorA === 7 || factorB === 7) return "seven";
-
-  return "general";
 }
 
 /**
@@ -95,6 +356,11 @@ export function getDynamicRuleExplanation(
   // 1. Zero Property
   if (strategy === "zero") {
     const other = factorA === 0 ? factorB : factorA;
+    const checkQ = {
+      prompt: `${factorA} × ${factorB} = 0. We got 0 because there are zero groups of ${other || 5}. How many items are in 0 groups of ${other || 5}?`,
+      expectedAnswer: 0,
+      hint: `In ${factorA} × ${factorB} = 0, zero groups of ${other || 5} equals 0.`,
+    };
     return {
       lessonId: 1,
       ruleName: "Zero Property",
@@ -111,12 +377,14 @@ export function getDynamicRuleExplanation(
         },
       ],
       conclusion: `${factorA} × ${factorB} = 0`,
-      checkQuestion: {
-        prompt: `How many items are in 0 groups of ${other || 5}?`,
-        expectedAnswer: 0,
-        hint: "Zero groups always equals 0.",
-      },
+      checkQuestion: checkQ,
       checkQuestionVisual: { a: 0, b: other || 5 },
+      checkSteps: [
+        {
+          ...checkQ,
+          visual: { a: 0, b: other || 5 },
+        },
+      ],
       repeatedAddition: "0",
     };
   }
@@ -125,6 +393,11 @@ export function getDynamicRuleExplanation(
   if (strategy === "one") {
     const n = factorA === 1 ? factorB : factorA;
     const isOneByOne = factorA === 1 && factorB === 1;
+    const checkQ = {
+      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} from 1 group of ${n}. What number is in that 1 group?`,
+      expectedAnswer: n,
+      hint: `In ${factorA} × ${factorB} = ${product}, 1 group of ${n} equals ${n}.`,
+    };
 
     return {
       lessonId: 1,
@@ -145,14 +418,14 @@ export function getDynamicRuleExplanation(
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
-      checkQuestion: {
-        prompt: isOneByOne
-          ? "If you have 1 group of 1, what is the total?"
-          : `If you have 1 group of ${n}, what is the total?`,
-        expectedAnswer: n,
-        hint: `1 group of ${n} is simply ${n}.`,
-      },
+      checkQuestion: checkQ,
       checkQuestionVisual: { a: 1, b: n },
+      checkSteps: [
+        {
+          ...checkQ,
+          visual: { a: 1, b: n },
+        },
+      ],
       commutativityNote: factorA !== 1 ? `${factorA} × 1 is ${factorA} groups of 1, which equals 1 group of ${n} (${n}).` : undefined,
       repeatedAddition: `${n}`,
     };
@@ -185,76 +458,125 @@ export function getDynamicRuleExplanation(
       });
     }
 
+    const checkQ = {
+      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by doubling a number. Which number did we double?`,
+      expectedAnswer: n,
+      hint: `In ${factorA} × ${factorB} = ${product}, we doubled ${n} (${n} + ${n} = ${product}).`,
+    };
+
     return {
       lessonId: 2,
       ruleName: "The Double Rule (×2)",
       concept: "Multiplying by 2 means combining two equal groups.",
       strategyOverview:
-        `Multiplying by 2 means two equal groups. 2 × ${n} is two groups of ${n}, so we calculate ${n} + ${n} = ${product}. We always double the other factor.`,
+        `Multiplying by 2 means two equal groups. 2 × ${n} is two groups of ${n}, so we calculate ${n} + ${n} = ${product}. We double ${n} (the number multiplied by 2).`,
       contextLeadIn: `In basketball, scoring two ${n}-point field goals equals 2 × ${n} = ${product} points.`,
       steps,
       conclusion: `${factorA} × ${factorB} = ${product}`,
-      checkQuestion: {
-        prompt: isTwoByTwo ? "What is 2 + 2?" : `What number do we double to find 2 × ${n}?`,
-        expectedAnswer: n,
-        hint: `In 2 × ${n}, double the other factor: ${n}.`,
-      },
-      checkQuestionVisual: { a: 2, b: n },
+      checkQuestion: checkQ,
+      checkQuestionVisual: { a: 1, b: n },
+      checkSteps: [
+        {
+          ...checkQ,
+          visual: { a: 1, b: n },
+        },
+        {
+          prompt: `Double ${n}. What is ${n} + ${n}?`,
+          expectedAnswer: product,
+          hint: `Two groups of ${n} make ${product} (${n} + ${n} = ${product}).`,
+          visual: { a: 2, b: n },
+        },
+      ],
       commutativityNote: factorA !== 2 ? `${factorA} × 2 is ${factorA} groups of 2, which equals 2 groups of ${n} (${n} + ${n} = ${product}).` : undefined,
-      repeatedAddition: `${n} + ${n}`,
+      repeatedAddition: `${n} + ${n} = ${product}`,
     };
   }
 
-  // 4. Landmark Fives (x5)
+  // 4. Count by 5s (x5)
   if (strategy === "five") {
     const n = factorA === 5 ? factorB : factorA;
-    const countSequence = Array.from({ length: Math.min(n, 5) })
+    const timesWords: Record<number, string> = {
+      1: "one time",
+      2: "two times",
+      3: "three times",
+      4: "four times",
+      5: "five times",
+      6: "six times",
+      7: "seven times",
+      8: "eight times",
+      9: "nine times",
+    };
+    const countSequence = Array.from({ length: n })
       .map((_, i) => (i + 1) * 5)
-      .join(", ") + (n > 5 ? ` ... ${product}` : "");
+      .join(", ");
+    const parity = n % 2 === 0 ? "even" : "odd";
+    const lastDigit = product % 10;
+
+    const checkQ = {
+      prompt: `${factorA} × ${factorB} = ${product}. Count by 5s ${timesWords[n] || `${n} times`}: ${countSequence}. What total do ${n} groups of 5 make?`,
+      expectedAnswer: product,
+      hint: `In ${factorA} × ${factorB} = ${product}, counting by 5s ${timesWords[n] || `${n} times`} (${countSequence}) gives ${product}.`,
+    };
 
     return {
       lessonId: 3,
-      ruleName: "The 5s Skip Rule (×5)",
-      concept: "Multiples of 5 always end in 0 or 5 (like clock minutes or nickels).",
+      ruleName: "Count by 5s (×5)",
+      concept: "Count by 5s to find the product. Even factors end in 0; odd factors end in 5.",
       strategyOverview:
-        `Multiples of 5 represent landmark numbers. Counting ${n} groups of 5 progresses by 5s (${countSequence}) and always ends in 0 (for even factors) or 5 (for odd factors).`,
-      contextLeadIn: `On a clock, the minute hand pointing to ${n} represents 5 × ${n} = ${product} minutes.`,
+        `What is ${factorA} × ${factorB}?\nCount by 5s ${timesWords[n] || `${n} times`}. Say ${countSequence}.\nSo ${factorA} × ${factorB} = ${product}.\n\nLook at the last digit.\nWhen you multiply 5 by an even number, the answer ends in 0. When you multiply 5 by an odd number, the answer ends in 5. Here, ${n} is ${parity}, and ${product} ends in ${lastDigit}.`,
+      contextLeadIn: "",
       steps: [
         {
           stepNumber: 1,
-          label: `Count by 5s (${n} times)`,
-          math: countSequence,
+          label: `Count by 5s ${timesWords[n] || `${n} times`}`,
+          math: `${countSequence}`,
         },
         {
           stepNumber: 2,
-          label: n % 2 === 0 ? "Even factor ends in 0" : "Odd factor ends in 5",
-          math: `Ends in ${product % 10} → ${product}`,
+          label: "Look at the last digit",
+          math: `${n} is ${parity} → ${product} ends in ${lastDigit}`,
           highlight: true,
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
-      checkQuestion: {
-        prompt: `On an analog clock face, how many minutes are at the ${n}?`,
-        expectedAnswer: product,
-        hint: `Each clock number is 5 minutes: 5 × ${n} = ${product}.`,
-      },
-      checkQuestionVisual: { a: 5, b: n },
-      repeatedAddition: Array.from({ length: factorA }).map(() => factorB).join(" + "),
+      checkQuestion: checkQ,
+      checkQuestionVisual: { a: n, b: 5 },
+      checkSteps: [
+        {
+          ...checkQ,
+          visual: { a: n, b: 5 },
+        },
+      ],
+      repeatedAddition: `${countSequence} = ${product}`,
     };
   }
 
-  // 5. Double + 1 More Group (x3) - P1 Strategy Split & Intermediate Visual Agreement
+  // 5. Double, Then Add One More Group (×3)
   if (strategy === "three") {
     const n = factorA === 3 ? factorB : factorA;
     const doubleVal = n * 2;
 
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Double ${n}. What is ${n} + ${n}?`,
+      expectedAnswer: doubleVal,
+      hint: `Double ${n}. Two groups of ${n} make ${doubleVal} (${n} + ${n} = ${doubleVal}).`,
+      visual: { a: 2, b: n },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Add one more group of ${n}. What is ${doubleVal} + ${n}?`,
+      expectedAnswer: product,
+      hint: `Add one more group of ${n}: ${doubleVal} + ${n} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+      visual: { a: 3, b: n },
+    };
+
     return {
       lessonId: 4,
-      ruleName: "Double + 1 More Rule (×3)",
-      concept: "3 groups = 2 groups (the double) plus 1 more group.",
+      ruleName: "Double, Then Add One More Group (×3)",
+      concept: "3 groups = 2 groups (the double) plus one more group.",
       strategyOverview:
-        `To multiply by 3, break 3 into 2 + 1. First double the other factor (${n} + ${n} = ${doubleVal}), then add one more group of ${n} (${doubleVal} + ${n} = ${product}).`,
-      contextLeadIn: `An auditorium row with 3 sections of ${n} seats has 2 × ${n} = ${doubleVal} seats plus 1 more section of ${n} = ${product} seats.`,
+        `How can you use doubling to find ${factorA} × ${factorB}?\nThink of ${factorA} × ${factorB} as 3 groups of ${n}. Start with two groups, then add the third.\nDouble ${n}. Two groups of ${n} make ${doubleVal}. ${n} + ${n} = ${doubleVal}\nAdd one more group of ${n}. ${doubleVal} + ${n} = ${product}\nSo ${factorA} × ${factorB} = ${product}.\n\nPicture it. There are 3 sections with ${n} seats in each. The first two sections have ${doubleVal} seats. The last section adds ${n} more, for ${product} seats in all.`,
+      contextLeadIn: "",
       steps: [
         {
           stepNumber: 1,
@@ -263,27 +585,42 @@ export function getDynamicRuleExplanation(
         },
         {
           stepNumber: 2,
-          label: `Add 1 more ${n}`,
+          label: `Add one more group of ${n}`,
           math: `${doubleVal} + ${n} = ${product}`,
           highlight: true,
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
-      // P1: Check question asks for the intermediate double, so visual displays 2 groups of n
+      // Staged multi-step check: Step 1 shows 2 groups of n (total = doubleVal); Step 2 reveals 3rd group (total = product)
       checkQuestion: {
-        prompt: `To find 3 × ${n}, first double ${n}: what is ${n} + ${n}?`,
-        expectedAnswer: doubleVal,
-        hint: `Double ${n} is ${doubleVal}. Next add ${n} to reach ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
       checkQuestionVisual: { a: 2, b: n },
-      repeatedAddition: `${doubleVal} + ${n} = ${product} (Double is ${doubleVal}, plus ${n})`,
+      checkSteps: [step1Check, step2Check],
+      repeatedAddition: `${doubleVal} + ${n} = ${product} (Double ${n} is ${doubleVal}, plus one more group of ${n})`,
     };
   }
 
-  // 6. Double-Double (x4) - P1 Strategy Split & Intermediate Visual Agreement
+  // 6. Double-Double (x4) - Staged Multi-Step Check
   if (strategy === "four") {
     const n = factorA === 4 ? factorB : factorA;
     const d1 = n * 2;
+
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Double ${n}. What is ${n} + ${n}?`,
+      expectedAnswer: d1,
+      hint: `Step 1: Double ${n} is ${n} + ${n} = ${d1}.`,
+      visual: { a: 2, b: n },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Double again. What is ${d1} + ${d1}?`,
+      expectedAnswer: product,
+      hint: `Step 2: Double again (${d1} + ${d1} = ${product}). So ${factorA} × ${factorB} = ${product}.`,
+      visual: { a: 4, b: n },
+    };
 
     return {
       lessonId: 5,
@@ -295,33 +632,47 @@ export function getDynamicRuleExplanation(
       steps: [
         {
           stepNumber: 1,
-          label: `First double (${n})`,
+          label: `Double ${n}`,
           math: `${n} + ${n} = ${d1}`,
         },
         {
           stepNumber: 2,
-          label: `Second double (${d1})`,
+          label: "Double again",
           math: `${d1} + ${d1} = ${product}`,
           highlight: true,
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
-      // P1: Check question asks for first double, so visual displays 2 groups of n
       checkQuestion: {
-        prompt: `To find 4 × ${n}, what is the first double of ${n} (${n} + ${n})?`,
-        expectedAnswer: d1,
-        hint: `First double of ${n} is ${d1}. Then double ${d1} to get ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
       checkQuestionVisual: { a: 2, b: n },
+      checkSteps: [step1Check, step2Check],
       repeatedAddition: `${d1} + ${d1} = ${product} (Double ${n} is ${d1}, double again is ${product})`,
     };
   }
 
-  // 7. The Magical Nines (x9) - P1 Tens/Ones Split
+  // 7. The Magical Nines (x9) - Staged Multi-Step Check
   if (strategy === "nine") {
     const n = factorA === 9 ? factorB : factorA;
     const tens = n - 1;
     const units = 9 - tens;
+
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is finding the tens digit (1 less than ${n}). What is ${n} - 1?`,
+      expectedAnswer: tens,
+      hint: `In ${factorA} × ${factorB} = ${product}, ${n} minus 1 is ${tens}.`,
+      visual: { a: 1, b: tens },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `The tens digit is ${tens} and the ones digit is ${units} (${tens} + ${units} = 9). What is ${factorA} × ${factorB}?`,
+      expectedAnswer: product,
+      hint: `Tens digit ${tens} and ones digit ${units} make ${product} (${factorA} × ${factorB} = ${product}).`,
+      visual: { a: 9, b: n },
+    };
 
     return {
       lessonId: 6,
@@ -345,16 +696,17 @@ export function getDynamicRuleExplanation(
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: {
-        prompt: `For 9 × ${n}, what is the tens digit (1 less than ${n})?`,
-        expectedAnswer: tens,
-        hint: `${n} minus 1 is ${tens}. (And ${tens} + ${units} = 9, so ${product}!)`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 9, b: n },
+      checkQuestionVisual: { a: 1, b: tens },
+      checkSteps: [step1Check, step2Check],
       repeatedAddition: `Tens: ${n}-1 = ${tens}, Ones: 9-${tens} = ${units} → ${product}`,
     };
   }
 
-  // 8. Perfect Squares (nxn) - P1 Full Squares List & Geometric Shapes
+  // 8. Perfect Squares (nxn)
   if (strategy === "square") {
     const derivation =
       factorA === 7
@@ -364,6 +716,20 @@ export function getDynamicRuleExplanation(
         : factorA === 6
         ? "Anchor: 6 × 6 = 30 (from 5 × 6) + 6 = 36."
         : `Equal factors form a geometric square: ${factorA} × ${factorA} = ${product}.`;
+
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by multiplying a number by itself in a square grid. Which number did we multiply by itself?`,
+      expectedAnswer: factorA,
+      hint: `In ${factorA} × ${factorB} = ${product}, each row of the square has ${factorA} items.`,
+      visual: { a: 1, b: factorA },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Combine all ${factorA} rows of ${factorB} in the square. What is ${factorA} × ${factorB}?`,
+      expectedAnswer: product,
+      hint: `${factorA} rows of ${factorB} make ${product} (${factorA} × ${factorB} = ${product}).`,
+      visual: { a: factorA, b: factorB },
+    };
 
     return {
       lessonId: 7,
@@ -387,63 +753,100 @@ export function getDynamicRuleExplanation(
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: {
-        prompt: `A square grid with ${factorA} rows and ${factorA} columns has how many total squares?`,
-        expectedAnswer: product,
-        hint: `Square fact: ${factorA} × ${factorA} = ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: factorA, b: factorB },
+      checkQuestionVisual: { a: 1, b: factorA },
+      checkSteps: [step1Check, step2Check],
       repeatedAddition: `Square: ${factorA} × ${factorB} = ${product} [Squares: 25, 36, 49, 64, 81]`,
     };
   }
 
-  // 9. Landmark Sixes (x6) - P1 5-Group + 1 with Landmark definition
+  // 9. Landmark Sixes (x6) - 5-Group + 1 More Group
   if (strategy === "six") {
     const n = factorA === 6 ? factorB : factorA;
     const fivePart = 5 * n;
 
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is finding 5 groups of ${n} (5 × ${n}). What is 5 × ${n}?`,
+      expectedAnswer: fivePart,
+      hint: `Step 1: 5 groups of ${n} is 5 × ${n} = ${fivePart}.`,
+      visual: { a: 5, b: n },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Add one more group of ${n}. What is ${fivePart} + ${n}?`,
+      expectedAnswer: product,
+      hint: `Step 2: ${fivePart} + ${n} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+      visual: { a: 6, b: n },
+    };
+
     return {
       lessonId: 8,
       ruleName: "5-Group + 1 Rule (×6)",
-      concept: "6 groups = 5 groups (easy landmark) + 1 more group.",
+      concept: "6 groups = 5 groups (easy landmark) + one more group.",
       strategyOverview:
         `6 is 5 + 1. First find the easy 5s landmark (a landmark is an easy, friendly number like 5s or 10s that serves as a stepping stone): 5 × ${n} = ${fivePart}. Then add one more group of ${n}: ${fivePart} + ${n} = ${product}.`,
       contextLeadIn: `Items are packed in 6-packs (5 standard cans + 1 bonus can). ${n} six-packs have 5 × ${n} = ${fivePart} standard plus ${n} bonus = ${product} total cans.`,
       steps: [
         {
           stepNumber: 1,
-          label: `5s landmark (5 × ${n})`,
+          label: `5 groups of ${n}`,
           math: `5 × ${n} = ${fivePart}`,
         },
         {
           stepNumber: 2,
-          label: `Add 1 more group (${n})`,
+          label: `Add one more group of ${n}`,
           math: `${fivePart} + ${n} = ${product}`,
           highlight: true,
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: {
-        prompt: `For 6 × ${n}, first find the 5s landmark: what is 5 × ${n}?`,
-        expectedAnswer: fivePart,
-        hint: `5 × ${n} = ${fivePart}. Next add ${n} to reach ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
       checkQuestionVisual: { a: 5, b: n },
-      repeatedAddition: `${fivePart} + ${n} = ${product} (5-group is ${fivePart}, plus ${n})`,
+      checkSteps: [step1Check, step2Check],
+      repeatedAddition: `${fivePart} + ${n} = ${product} (5 groups of ${n} is ${fivePart}, plus one more group of ${n})`,
     };
   }
 
-  // 10. The Tricky Eights (x8) - P0 Triple-Double for WHOLE x8 family
+  // 10. The Tricky Eights (x8) - Triple-Double
   if (strategy === "eight") {
     const n = factorA === 8 ? factorB : factorA;
     const d1 = n * 2;
     const d2 = d1 * 2;
 
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is the first double: Double ${n}. What is ${n} + ${n}?`,
+      expectedAnswer: d1,
+      hint: `First double: ${n} + ${n} = ${d1}.`,
+      visual: { a: 2, b: n },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Step 2 is the second double: Double ${d1}. What is ${d1} + ${d1}?`,
+      expectedAnswer: d2,
+      hint: `Second double: ${d1} + ${d1} = ${d2}.`,
+      visual: { a: 4, b: n },
+    };
+
+    const step3Check: StagedCheckStep = {
+      prompt: `Step 3 is the third double: Double ${d2}. What is ${d2} + ${d2}?`,
+      expectedAnswer: product,
+      hint: `Third double: ${d2} + ${d2} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+      visual: { a: 8, b: n },
+    };
+
     return {
       lessonId: 9,
       ruleName: "Triple-Double Strategy (×8)",
-      concept: "8 is 2 × 2 × 2: Double the other factor three times.",
+      concept: "8 is 2 × 2 × 2: Double the number multiplied by 8 three times.",
       strategyOverview:
-        `8 is 2 × 2 × 2, so to multiply by 8, double the other factor three times. For 8 × ${n}: first double ${n} (${n} + ${n} = ${d1}), double again (${d1} + ${d1} = ${d2}), and double a third time (${d2} + ${d2} = ${product}).`,
+        `8 is 2 × 2 × 2, so to multiply by 8, double ${n} (the number multiplied by 8) three times. For 8 × ${n}: first double ${n} (${n} + ${n} = ${d1}), double again (${d1} + ${d1} = ${d2}), and double a third time (${d2} + ${d2} = ${product}).`,
       contextLeadIn: `A recipe requires 8 fluid ounces per portion. ${n} portions require 8 × ${n} = ${product} fluid ounces.`,
       steps: [
         {
@@ -465,17 +868,39 @@ export function getDynamicRuleExplanation(
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: {
-        prompt: `To multiply 8 × ${n}, double ${n} to get ${d1}, and double ${d1} to get ${d2}. What is the third double: ${d2} + ${d2}?`,
-        expectedAnswer: product,
-        hint: `Third double: ${d2} + ${d2} = ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 8, b: n },
+      checkQuestionVisual: { a: 2, b: n },
+      checkSteps: [step1Check, step2Check, step3Check],
       repeatedAddition: `Triple-Double: ${n} → ${d1} → ${d2} → ${product}`,
     };
   }
 
-  // 11. The Summit Fact (7 x 8 = 56) - P0 Distinct Mnemonic Rhyme & Decomposition in Lesson 10 ONLY
+  // 11. The Summit Fact (7 x 8 = 56) - Distinct Mnemonic Rhyme & Decomposition in Lesson 10
   if (strategy === "summit") {
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = 56. To check 7 × 8 = 56 one step at a time, split 7 into 5 + 2. First, what is 5 × 8?`,
+      expectedAnswer: 40,
+      hint: "Step 1: 5 groups of 8 is 5 × 8 = 40.",
+      visual: { a: 5, b: 8 },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: "Next, find 2 groups of 8 (2 × 8). What is 8 + 8?",
+      expectedAnswer: 16,
+      hint: "Step 2: 2 groups of 8 is 8 + 8 = 16.",
+      visual: { a: 2, b: 8 },
+    };
+
+    const step3Check: StagedCheckStep = {
+      prompt: "Add the 5 groups (40) and 2 groups (16). What is 40 + 16?",
+      expectedAnswer: 56,
+      hint: "40 + 16 = 56. So 7 × 8 = 56!",
+      visual: { a: 7, b: 8 },
+    };
+
     return {
       lessonId: 10,
       ruleName: "5-6-7-8 Rhyme Mnemonic & Decomposition",
@@ -498,11 +923,12 @@ export function getDynamicRuleExplanation(
       ],
       conclusion: `${factorA} × ${factorB} = 56`,
       checkQuestion: {
-        prompt: "Say the mnemonic: 5, 6, 7, 8. What is 7 × 8?",
-        expectedAnswer: 56,
-        hint: "5, 6, 7, 8 gives 56 = 7 × 8.",
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 7, b: 8 },
+      checkQuestionVisual: { a: 5, b: 8 },
+      checkSteps: [step1Check, step2Check, step3Check],
       repeatedAddition: "5, 6, 7, 8 Rhyme: 40 + 16 = 56",
     };
   }
@@ -512,6 +938,27 @@ export function getDynamicRuleExplanation(
     const n = factorA === 7 ? factorB : factorA;
     const part5 = 5 * n;
     const part2 = 2 * n;
+
+    const step1Check: StagedCheckStep = {
+      prompt: `${factorA} × ${factorB} = ${product}. Split 7 into 5 + 2. First, what are 5 groups of ${n} (5 × ${n})?`,
+      expectedAnswer: part5,
+      hint: `Step 1: 5 groups of ${n} is 5 × ${n} = ${part5}.`,
+      visual: { a: 5, b: n },
+    };
+
+    const step2Check: StagedCheckStep = {
+      prompt: `Next, what are 2 groups of ${n} (${n} + ${n})?`,
+      expectedAnswer: part2,
+      hint: `Step 2: 2 groups of ${n} is ${n} + ${n} = ${part2}.`,
+      visual: { a: 2, b: n },
+    };
+
+    const step3Check: StagedCheckStep = {
+      prompt: `Add the 5 groups (${part5}) and 2 groups (${part2}). What is ${part5} + ${part2}?`,
+      expectedAnswer: product,
+      hint: `${part5} + ${part2} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+      visual: { a: 7, b: n },
+    };
 
     return {
       lessonId: 10,
@@ -533,35 +980,50 @@ export function getDynamicRuleExplanation(
         },
         {
           stepNumber: 3,
-          label: "Combine landmarks",
+          label: "Combine groups",
           math: `${part5} + ${part2} = ${product}`,
           highlight: true,
         },
       ],
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: {
-        prompt: `For 7 × ${n}, 5 groups is ${part5} and 2 groups is ${part2}. What is ${part5} + ${part2}?`,
-        expectedAnswer: product,
-        hint: `${part5} + ${part2} = ${product}.`,
+        prompt: step1Check.prompt,
+        expectedAnswer: step1Check.expectedAnswer,
+        hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 7, b: n },
+      checkQuestionVisual: { a: 5, b: n },
+      checkSteps: [step1Check, step2Check, step3Check],
       repeatedAddition: `${part5} + ${part2} = ${product} (5-group ${part5} + 2-group ${part2})`,
     };
   }
 
-  // 13. Mixed Retrieval (Lesson 11) - P0 Real Mixed Retrieval Overview with Strategy Recap Table
+  // 13. Mixed Retrieval (Lesson 11) Overview + Staged Check for 6 × 7
+  const step1Mixed: StagedCheckStep = {
+    prompt: `${factorA} × ${factorB} = ${product}. Using the 5-Group + 1 strategy for ${factorA} × ${factorB}, Step 1 is 5 × ${factorB}. What is 5 × ${factorB}?`,
+    expectedAnswer: 5 * factorB,
+    hint: `Step 1: 5 groups of ${factorB} is 5 × ${factorB} = ${5 * factorB}.`,
+    visual: { a: 5, b: factorB },
+  };
+
+  const step2Mixed: StagedCheckStep = {
+    prompt: `Add one more group of ${factorB}. What is ${5 * factorB} + ${factorB}?`,
+    expectedAnswer: product,
+    hint: `${5 * factorB} + ${factorB} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+    visual: { a: factorA, b: factorB },
+  };
+
   return {
     lessonId: 11,
     ruleName: "Mixed Retrieval & Fluency",
     concept: "Direct memory recall using learned strategy anchors.",
     strategyOverview:
-      `This lesson mixes every fact learned so far. There is no single strategy to apply; retrieve each fact directly using whichever strategy fits (Doubles, Clock 5s, Double-Double, 9s pattern, Squares, 5-group + 1, or Triple-Double). Automaticity means retrieving answers directly from memory within 3.5 seconds.`,
+      `This lesson mixes every fact learned so far. There is no single strategy to apply; retrieve each fact directly using whichever strategy fits (Doubles, Count by 5s, Double, Then Add One More Group, Double-Double, 9s pattern, Squares, 5-group + 1, or Triple-Double). Automaticity means retrieving answers directly from memory within 3.5 seconds.`,
     contextLeadIn: "Speed automaticity sprint: target under 3.5 seconds per fact with 4+/5 accuracy.",
     steps: [
       {
         stepNumber: 1,
         label: "Strategy Anchors Recap",
-        math: "×2: Double | ×3: Double+1 | ×4: Double-Double | ×5: Clock 5s | ×6: 5+1 | ×8: Triple-Double | ×9: Tens=N-1 | Squares",
+        math: "×2: Double | ×3: Double + 1 Group | ×4: Double-Double | ×5: Count by 5s | ×6: 5 + 1 Group | ×8: Triple-Double | ×9: Tens=N-1 | Squares",
       },
       {
         stepNumber: 2,
@@ -572,11 +1034,12 @@ export function getDynamicRuleExplanation(
     ],
     conclusion: `${factorA} × ${factorB} = ${product}`,
     checkQuestion: {
-      prompt: `In this mixed sprint, what is ${factorA} × ${factorB}?`,
-      expectedAnswer: product,
-      hint: `${factorA} × ${factorB} = ${product}.`,
+      prompt: step1Mixed.prompt,
+      expectedAnswer: step1Mixed.expectedAnswer,
+      hint: step1Mixed.hint,
     },
-    checkQuestionVisual: { a: factorA, b: factorB },
+    checkQuestionVisual: { a: 5, b: factorB },
+    checkSteps: [step1Mixed, step2Mixed],
     repeatedAddition: `Mixed Retrieval: ${factorA} × ${factorB} = ${product}`,
   };
 }

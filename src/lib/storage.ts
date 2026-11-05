@@ -317,10 +317,18 @@ export function getActiveStudentId(): string {
 }
 
 export function setActiveStudentId(id: string): void {
-  setCookie(USER_COOKIE_KEY, id);
+  if (!id) {
+    setCookie(USER_COOKIE_KEY, "", 0);
+  } else {
+    setCookie(USER_COOKIE_KEY, id);
+  }
   const storage = getStorage();
   if (!storage) return;
-  storage.setItem(ACTIVE_STUDENT_KEY, id);
+  if (!id) {
+    storage.removeItem(ACTIVE_STUDENT_KEY);
+  } else {
+    storage.setItem(ACTIVE_STUDENT_KEY, id);
+  }
 }
 
 export function getStudentById(id: string): StudentProfile | null {

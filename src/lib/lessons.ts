@@ -1,6 +1,14 @@
-import type { DILesson } from "./types.ts";
+import type { DILesson, MathFact } from "./types.ts";
+import { strategyFor } from "./ruleEngine.ts";
 
-export const DI_LESSONS: DILesson[] = [
+function withFactStrategy(facts: MathFact[], lessonId?: number): MathFact[] {
+  return facts.map((f) => ({
+    ...f,
+    strategy: strategyFor(f.a, f.b, lessonId),
+  }));
+}
+
+const RAW_DI_LESSONS: DILesson[] = [
   {
     id: 1,
     title: "Lesson 1: Zero & One Foundations",
@@ -52,10 +60,10 @@ export const DI_LESSONS: DILesson[] = [
   },
   {
     id: 3,
-    title: "Lesson 3: The Clock & Nickels (×5)",
-    subtitle: "Counting by 5s Landmark",
-    ruleName: "The 5s Skip Rule",
-    ruleSummary: "Products of 5 always end in 0 or 5. Think of minutes on a clock or nickels!",
+    title: "Lesson 3: Count by 5s (×5)",
+    subtitle: "Count by 5s",
+    ruleName: "Count by 5s (×5)",
+    ruleSummary: "Count by 5s to find the product. Multiplying 5 by an even number ends in 0; by an odd number ends in 5.",
     targetTables: [5],
     targetFacts: [
       { a: 5, b: 3, product: 15 },
@@ -70,19 +78,19 @@ export const DI_LESSONS: DILesson[] = [
       { a: 2, b: 7, product: 14 },
       { a: 2, b: 9, product: 18 },
     ],
-    icon: "⏱️",
+    icon: "🖐️",
     badgeColor: "from-amber-400 to-orange-500",
   },
   {
     id: 4,
-    title: "Lesson 4: Double + One Group (×3)",
+    title: "Lesson 4: Double, Then Add One More Group (×3)",
     subtitle: "Bridge from Twos to Threes",
-    ruleName: "Double + 1 More Rule",
-    ruleSummary: "To multiply by 3: double the number, then add one more group! (3 × 6 = 12 + 6 = 18)",
+    ruleName: "Double, Then Add One More Group (×3)",
+    ruleSummary: "To multiply by 3: double the group size, then add one more group! (3 × 4: double 4 is 8, plus 4 is 12)",
     targetTables: [3],
     targetFacts: [
-      { a: 3, b: 3, product: 9 },
       { a: 3, b: 4, product: 12 },
+      { a: 3, b: 3, product: 9 },
       { a: 3, b: 6, product: 18 },
       { a: 3, b: 7, product: 21 },
       { a: 3, b: 8, product: 24 },
@@ -191,7 +199,7 @@ export const DI_LESSONS: DILesson[] = [
     title: "Lesson 9: The Tricky Eights (×8)",
     subtitle: "Triple-Double Strategy",
     ruleName: "Triple-Double Strategy",
-    ruleSummary: "8 is 2 × 2 × 2. Double the other factor three times! (e.g. 8 × 7: 7+7=14, 14+14=28, 28+28=56).",
+    ruleSummary: "8 is 2 × 2 × 2. Double the number multiplied by 8 three times! (e.g. 8 × 7: 7+7=14, 14+14=28, 28+28=56).",
     targetTables: [8],
     targetFacts: [
       { a: 8, b: 4, product: 32 },
@@ -258,3 +266,10 @@ export const DI_LESSONS: DILesson[] = [
     badgeColor: "from-violet-500 via-fuchsia-500 to-cyan-400",
   },
 ];
+
+export const DI_LESSONS: DILesson[] = RAW_DI_LESSONS.map((lesson) => ({
+  ...lesson,
+  targetFacts: withFactStrategy(lesson.targetFacts, lesson.id),
+  // Review facts always resolve their own lesson's strategy (never borrowing the current lesson's banner)
+  reviewFacts: withFactStrategy(lesson.reviewFacts),
+}));
