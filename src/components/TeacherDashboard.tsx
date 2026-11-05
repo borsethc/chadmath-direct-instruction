@@ -604,9 +604,29 @@ export function TeacherDashboard({
                 autoFocus
                 value={newStudentName}
                 onChange={(e) => setNewStudentName(e.target.value)}
-                placeholder="e.g. Taylor Smith"
+                placeholder="e.g. Chad1"
                 className="w-full h-11 rounded-xl bg-black/50 border border-white/15 px-3 text-white text-sm font-bold outline-none focus:border-cyan-400"
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-bold text-white/60">Choose Emoji Profile</label>
+              <div className="grid grid-cols-5 gap-2">
+                {["🦁", "🐬", "🚀", "🦄", "⚡", "🦊", "🐯", "🐼", "🐲", "🌟"].map((av) => (
+                  <button
+                    key={av}
+                    type="button"
+                    onClick={() => setNewStudentAvatar(av)}
+                    className={`h-10 rounded-xl text-lg flex items-center justify-center transition-all cursor-pointer border ${
+                      newStudentAvatar === av
+                        ? "bg-cyan-500/20 border-cyan-400 shadow-[0_0_10px_rgba(6,182,212,0.4)]"
+                        : "bg-white/5 border-white/10 hover:bg-white/10"
+                    }`}
+                  >
+                    {av}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 pt-2">

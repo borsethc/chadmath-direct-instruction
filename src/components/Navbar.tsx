@@ -1,30 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { Volume2, VolumeX, Flame, GraduationCap, LogOut } from "lucide-react";
+import { Flame, LogOut } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
-import { soundEffects } from "@/lib/sounds";
 
 interface NavbarProps {
   currentStudent: StudentProfile | null;
   onGoHome: () => void;
-  onOpenTeacherPortal?: () => void;
   onSwitchStudent?: () => void;
 }
 
 export function Navbar({
   currentStudent,
   onGoHome,
-  onOpenTeacherPortal,
   onSwitchStudent,
 }: NavbarProps) {
-  const [isMuted, setIsMuted] = useState(!soundEffects.enabled);
-
-  const toggleSound = () => {
-    soundEffects.enabled = !soundEffects.enabled;
-    setIsMuted(!soundEffects.enabled);
-  };
-
   return (
     <header className="w-full bg-[#08090f]/95 border-b border-white/10 backdrop-blur-xl px-3 sm:px-6 py-2.5 pt-safe flex items-center justify-between shrink-0 sticky top-0 z-40 select-none">
       {/* Brand Logo & Direct Instruction Tag */}
@@ -52,15 +41,14 @@ export function Navbar({
         </div>
       </div>
 
-      {/* Controls: Active User Badge, Teacher Portal & Sound Toggle */}
+      {/* Controls: Active User Badge & Change User / Logout Button */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-        {/* Active User Badge & Change User / Logout Button */}
         {currentStudent && (
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div
-              onClick={onSwitchStudent || onGoHome}
+              onClick={onGoHome}
               className="flex items-center gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-white/[0.04] border border-white/10 select-none cursor-pointer hover:bg-white/[0.08] transition-all"
-              title="Click to switch profile"
+              title="View your lessons and progress"
             >
               <span className="text-base sm:text-lg">{currentStudent.avatar}</span>
               <div className="flex flex-col text-left">
@@ -91,31 +79,6 @@ export function Navbar({
             )}
           </div>
         )}
-
-        {/* Teacher Portal Button (Always present and reachable for the owner) */}
-        {onOpenTeacherPortal && (
-          <button
-            onClick={onOpenTeacherPortal}
-            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/80 hover:text-white border border-white/10 hover:border-amber-500/40 text-xs font-black transition-all cursor-pointer touch-manipulation shrink-0"
-            title="View Teacher Portal"
-          >
-            <GraduationCap className="w-4 h-4 text-amber-400" />
-            <span className="hidden xs:inline">Teacher</span>
-          </button>
-        )}
-
-        {/* Sound Toggle */}
-        <button
-          onClick={toggleSound}
-          className="w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer touch-manipulation shrink-0"
-          title={isMuted ? "Unmute sounds" : "Mute sounds"}
-        >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4 text-rose-400" />
-          ) : (
-            <Volume2 className="w-4 h-4 text-emerald-400" />
-          )}
-        </button>
       </div>
     </header>
   );

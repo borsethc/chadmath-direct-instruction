@@ -560,6 +560,42 @@ for (const lessonId of [1, 4, 5, 8, 10, 11]) {
   }
 }
 
+// 23. Login + Dashboard Cleanup & PIN-Protected /dashboard route
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, "..");
+const loginSrc = fs.readFileSync(path.join(repoRoot, "src/components/StudentLogin.tsx"), "utf8");
+const navbarSrc = fs.readFileSync(path.join(repoRoot, "src/components/Navbar.tsx"), "utf8");
+const dashboardSrc = fs.readFileSync(path.join(repoRoot, "src/components/StudentDashboard.tsx"), "utf8");
+const homePageSrc = fs.readFileSync(path.join(repoRoot, "src/app/page.tsx"), "utf8");
+const teacherRouteSrc = fs.readFileSync(path.join(repoRoot, "src/app/dashboard/page.tsx"), "utf8");
+const pinModalSrc = fs.readFileSync(path.join(repoRoot, "src/components/TeacherPinModal.tsx"), "utf8");
+
+assert(
+  !loginSrc.includes("Teacher Portal") && !loginSrc.includes("Add New Student"),
+  `StudentLogin has no "View Teacher Portal" link and no "+ Add New Student" button`
+);
+assert(
+  !navbarSrc.includes("Teacher") && !dashboardSrc.includes("Teacher Portal") && !homePageSrc.includes("TeacherDashboard"),
+  `No Teacher Portal entry exists in Navbar, StudentDashboard, or student Home page`
+);
+assert(
+  verifyTeacherPin("1234") && !pinModalSrc.includes("1234") && teacherRouteSrc.includes("TeacherPinModal"),
+  `/dashboard route is gated by PIN 1234 and never prints the PIN in the UI`
+);
+assert(
+  !dashboardSrc.includes("Day Streak (Chicago Time)") &&
+    dashboardSrc.includes("Daily Habit Streak") &&
+    dashboardSrc.includes("w-full px-3 py-1.5 rounded-full bg-cyan-500/20") &&
+    !dashboardSrc.includes("Volume2") &&
+    !dashboardSrc.includes("Type") &&
+    !navbarSrc.includes("Volume2"),
+  `StudentDashboard removes top streak pill, widens "TODAY'S 5-MINUTE LESSON" pill to full width, removes volume & text-size controls, and keeps Daily Habit Streak card below`
+);
+
 console.log("\n==========================================");
 if (testFailures === 0) {
   console.log("🎉 ALL ACCEPTANCE TESTS PASSED (0 failures)!");

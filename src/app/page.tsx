@@ -5,8 +5,6 @@ import { Navbar } from "@/components/Navbar";
 import { StudentLogin } from "@/components/StudentLogin";
 import { StudentDashboard } from "@/components/StudentDashboard";
 import { LessonEngine } from "@/components/LessonEngine";
-import { TeacherDashboard } from "@/components/TeacherDashboard";
-import { TeacherPinModal } from "@/components/TeacherPinModal";
 import { Confetti } from "@/components/Confetti";
 import { StudentProfile, DILesson, LessonAttempt } from "@/lib/types";
 import {
@@ -15,15 +13,13 @@ import {
   setActiveStudentId,
   recordLessonComplete,
 } from "@/lib/storage";
-import { DI_LESSONS } from "@/lib/lessons";
 
 export default function Home() {
   const [students, setStudents] = useState<StudentProfile[]>([]);
   const [activeStudent, setActiveStudent] = useState<StudentProfile | null>(null);
-  const [currentView, setCurrentView] = useState<"dashboard" | "lesson" | "login" | "teacher">("login");
+  const [currentView, setCurrentView] = useState<"dashboard" | "lesson" | "login">("login");
   const [activeLesson, setActiveLesson] = useState<DILesson | null>(null);
   const [confettiTrigger, setConfettiTrigger] = useState(false);
-  const [showTeacherPinModal, setShowTeacherPinModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Initialize and load saved student from cookie / storage
@@ -76,15 +72,6 @@ export default function Home() {
     setCurrentView("dashboard");
   };
 
-  const handleOpenTeacherPortal = () => {
-    setShowTeacherPinModal(true);
-  };
-
-  const handleTeacherPinSuccess = () => {
-    setShowTeacherPinModal(false);
-    setCurrentView("teacher");
-  };
-
   if (!isLoaded) {
     return (
       <div className="min-h-screen bg-[#08090f] flex items-center justify-center text-white font-black text-xl">
@@ -106,18 +93,10 @@ export default function Home() {
           }
         }}
         onSwitchStudent={handleLogoutStudent}
-        onOpenTeacherPortal={handleOpenTeacherPortal}
       />
 
       {/* Confetti celebration for lesson mastery */}
       <Confetti trigger={confettiTrigger} onComplete={() => setConfettiTrigger(false)} />
-
-      {/* Teacher PIN Modal (Protected owner access, no PIN printed anywhere) */}
-      <TeacherPinModal
-        isOpen={showTeacherPinModal}
-        onClose={() => setShowTeacherPinModal(false)}
-        onSuccess={handleTeacherPinSuccess}
-      />
 
       {/* Main View Router */}
       <main className="flex-1 flex flex-col">
@@ -125,7 +104,6 @@ export default function Home() {
           <StudentLogin
             students={students}
             onSelectStudent={handleSelectStudent}
-            onOpenTeacher={handleOpenTeacherPortal}
           />
         )}
 
@@ -134,7 +112,6 @@ export default function Home() {
             student={activeStudent}
             onStartLesson={handleStartLesson}
             onSwitchStudent={handleLogoutStudent}
-            onOpenTeacherPortal={handleOpenTeacherPortal}
           />
         )}
 
@@ -151,24 +128,6 @@ export default function Home() {
                 setActiveStudent(refreshed);
               }
               setCurrentView("dashboard");
-            }}
-          />
-        )}
-
-        {currentView === "teacher" && (
-          <TeacherDashboard
-            onBackToApp={() => {
-              const loaded = loadAllStudents();
-              setStudents(loaded);
-              const savedId = getActiveStudentId();
-              const curr = loaded.find((s) => s.id === savedId) || loaded[0] || null;
-              setActiveStudent(curr);
-              setCurrentView(curr ? "dashboard" : "login");
-            }}
-            onSelectStudentToPlay={(student) => {
-              handleSelectStudent(student);
-              const lesson = DI_LESSONS.find((l) => l.id === student.currentLessonId) || DI_LESSONS[0];
-              handleStartLesson(lesson);
             }}
           />
         )}

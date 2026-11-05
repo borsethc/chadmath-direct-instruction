@@ -4,21 +4,14 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play,
-  Flame,
   Award,
   Clock,
-  Sparkles,
-  CheckCircle2,
   Lock,
   ArrowRight,
   BookOpen,
   Zap,
   Info,
-  Volume2,
-  Type,
-  AlertCircle,
   LogOut,
-  Users,
 } from "lucide-react";
 import { StudentProfile, DILesson } from "@/lib/types";
 import { DI_LESSONS } from "@/lib/lessons";
@@ -27,14 +20,12 @@ import { soundEffects } from "@/lib/sounds";
 interface StudentDashboardProps {
   student: StudentProfile;
   onStartLesson: (lesson: DILesson) => void;
-  onOpenTeacherPortal?: () => void;
   onSwitchStudent?: () => void;
 }
 
 export function StudentDashboard({
   student,
   onStartLesson,
-  onOpenTeacherPortal,
   onSwitchStudent,
 }: StudentDashboardProps) {
   const isAllLessonsComplete =
@@ -47,8 +38,6 @@ export function StudentDashboard({
 
   const [selectedFactInfo, setSelectedFactInfo] = useState<{ a: number; b: number; status: string } | null>(null);
   const [lockedNotice, setLockedNotice] = useState<string | null>(null);
-  const [fontSize, setFontSize] = useState<"normal" | "large">("normal");
-  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
 
   // Calculate overall facts mastered (out of 81)
   const masteredCount = Object.values(student.factMastery).filter(
@@ -56,24 +45,8 @@ export function StudentDashboard({
   ).length;
   const masteryPercent = Math.round((masteredCount / 81) * 100);
 
-  const speakText = (text: string) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-    try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      utterance.onstart = () => setIsPlayingAudio(true);
-      utterance.onend = () => setIsPlayingAudio(false);
-      utterance.onerror = () => setIsPlayingAudio(false);
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      setIsPlayingAudio(false);
-    }
-  };
-
   return (
-    <div className={`w-full min-h-[calc(100vh-64px)] p-3 sm:p-6 md:p-8 flex flex-col gap-6 max-w-6xl mx-auto select-none ${fontSize === "large" ? "text-lg" : "text-base"}`}>
+    <div className="w-full min-h-[calc(100vh-64px)] p-3 sm:p-6 md:p-8 flex flex-col gap-6 max-w-6xl mx-auto select-none text-base">
       {/* Toast Notification for Locked Lessons */}
       <AnimatePresence>
         {lockedNotice && (
@@ -105,29 +78,22 @@ export function StudentDashboard({
         }`} />
 
         <div className="flex-1 flex flex-col gap-3 relative z-10 w-full">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              {isAllLessonsComplete ? (
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                  <Award className="w-3 h-3 text-emerald-300" />
-                  <span>All 11 Lessons Mastered!</span>
-                </span>
-              ) : (
-                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span>Today&apos;s 5-Minute Lesson</span>
-                </span>
-              )}
+          <div className="flex flex-col gap-2 w-full">
+            {isAllLessonsComplete ? (
+              <div className="w-full px-3 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5">
+                <Award className="w-3.5 h-3.5 text-emerald-300" />
+                <span>All 11 Lessons Mastered!</span>
+              </div>
+            ) : (
+              <div className="w-full px-3 py-1.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] sm:text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Today&apos;s 5-Minute Lesson</span>
+              </div>
+            )}
 
-              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
-                <Flame className="w-3 h-3 fill-current" />
-                <span>{student.streakDays || 0} Day Streak (Chicago Time)</span>
-              </span>
-            </div>
-
-            {/* Accessibility & Change User Controls */}
-            <div className="flex items-center gap-1.5">
-              {onSwitchStudent && (
+            {/* Header Controls (Change User / Log Out) */}
+            {onSwitchStudent && (
+              <div className="flex items-center justify-end">
                 <button
                   onClick={onSwitchStudent}
                   className="px-3 h-8 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 hover:border-rose-400/50 text-rose-300 hover:text-white flex items-center gap-1.5 transition-all cursor-pointer font-black text-xs"
@@ -136,32 +102,8 @@ export function StudentDashboard({
                   <LogOut className="w-3.5 h-3.5 text-rose-400" />
                   <span>Change User / Log Out</span>
                 </button>
-              )}
-              <button
-                onClick={() =>
-                  speakText(
-                    isAllLessonsComplete
-                      ? "Congratulations! All 11 lessons complete. Practice the mixed retrieval sprint anytime to maintain automaticity."
-                      : `${currentLesson.title}. ${currentLesson.ruleSummary}`
-                  )
-                }
-                className={`w-8 h-8 rounded-xl border flex items-center justify-center transition-all cursor-pointer ${
-                  isPlayingAudio
-                    ? "bg-cyan-500/30 border-cyan-400 text-cyan-300 animate-pulse"
-                    : "bg-white/5 hover:bg-white/10 border-white/10 text-white/70 hover:text-white"
-                }`}
-                title="Read lesson summary aloud"
-              >
-                <Volume2 className={`w-4 h-4 ${isPlayingAudio ? "text-cyan-300" : "text-cyan-400"}`} />
-              </button>
-              <button
-                onClick={() => setFontSize((prev) => (prev === "normal" ? "large" : "normal"))}
-                className="w-8 h-8 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white flex items-center justify-center transition-all cursor-pointer font-bold text-xs"
-                title="Toggle font size"
-              >
-                <Type className="w-3.5 h-3.5" />
-              </button>
-            </div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -450,7 +392,7 @@ export function StudentDashboard({
         </div>
       </div>
 
-      {/* Footer Navigation: Switch Profile & Teacher Portal */}
+      {/* Footer Navigation: Switch Profile */}
       <div className="w-full pt-2 pb-6 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-white/50">
         {onSwitchStudent && (
           <button
@@ -459,14 +401,6 @@ export function StudentDashboard({
           >
             <LogOut className="w-3.5 h-3.5 text-rose-400" />
             <span>Change User / Log Out</span>
-          </button>
-        )}
-        {onOpenTeacherPortal && (
-          <button
-            onClick={onOpenTeacherPortal}
-            className="text-amber-400/80 hover:text-amber-300 font-bold transition-colors cursor-pointer flex items-center gap-1.5 ml-auto"
-          >
-            <span>View Teacher Portal →</span>
           </button>
         )}
       </div>
