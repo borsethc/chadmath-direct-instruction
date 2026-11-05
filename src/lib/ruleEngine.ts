@@ -470,7 +470,7 @@ export function getDynamicRuleExplanation(
       concept: "Multiplying by 2 means combining two equal groups.",
       strategyOverview:
         `Multiplying by 2 means two equal groups. 2 × ${n} is two groups of ${n}, so we calculate ${n} + ${n} = ${product}. We double ${n} (the number multiplied by 2).`,
-      contextLeadIn: `In basketball, scoring two ${n}-point field goals equals 2 × ${n} = ${product} points.`,
+      contextLeadIn: `Two ${n}-point baskets score ${product} points.`,
       steps,
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: checkQ,
@@ -699,10 +699,10 @@ export function getDynamicRuleExplanation(
       factorA === 7
         ? "Anchor: 7 × 7 = 35 (from 5 × 7) + 14 (from 2 × 7) = 49."
         : factorA === 8
-        ? "Anchor: 8 × 8 = Triple-double 8: 16 → 32 → 64."
-        : factorA === 6
-        ? "Anchor: 6 × 6 = 30 (from 5 × 6) + 6 = 36."
-        : `Equal factors form a geometric square: ${factorA} × ${factorA} = ${product}.`;
+          ? "Anchor: 8 × 8 = Triple-double 8: 16 → 32 → 64."
+          : factorA === 6
+            ? "Anchor: 6 × 6 = 30 (from 5 × 6) + 6 = 36."
+            : `Equal factors form a geometric square: ${factorA} × ${factorA} = ${product}.`;
 
     const step1Check: StagedCheckStep = {
       prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by multiplying a number by itself in a square grid. Which number did we multiply by itself?`,

@@ -596,6 +596,21 @@ assert(
   `StudentDashboard removes top streak pill, widens "TODAY'S 5-MINUTE LESSON" pill to full width, removes volume & text-size controls, and keeps Daily Habit Streak card below`
 );
 
+// 24. Lesson 2 (Multiply by 2) Strategy Overview Screen Update
+const lessonEngineSrc = fs.readFileSync(path.join(repoRoot, "src/components/LessonEngine.tsx"), "utf8");
+assert(
+  lessonEngineSrc.includes("Multiply by 2: Double the Other Number") &&
+    lessonEngineSrc.includes(
+      'aria-label="Two groups with three dots in each group, making six dots altogether."'
+    ) &&
+    lessonEngineSrc.includes("Two 3-point baskets score 6 points.") &&
+    lessonEngineSrc.includes("(prefers-reduced-motion: reduce)") &&
+    lessonEngineSrc.includes("clearDoubleIntroTimers") &&
+    lessonEngineSrc.includes("<span>Replay</span>") &&
+    lessonEngineSrc.includes("<span>Try One</span>"),
+  `Lesson 2 Strategy Overview displays "Multiply by 2: Double the Other Number", accessible purple dot groups, staged animation with Replay & prefers-reduced-motion, context sentence, and "Try One" button`
+);
+
 console.log("\n==========================================");
 if (testFailures === 0) {
   console.log("🎉 ALL ACCEPTANCE TESTS PASSED (0 failures)!");

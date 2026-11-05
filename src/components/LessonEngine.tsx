@@ -137,6 +137,63 @@ export function LessonEngine({
   const questionStartTimeRef = useRef<number>(Date.now());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Lesson 2 (Multiply by 2) Strategy Overview Sequential Demonstration State
+  // Stages: 0 ("2 × 3") -> 1 (first group of 3 dots) -> 2 (second group of 3 dots + "Two groups of 3.") -> 3 ("Double 3:" & "3 + 3") -> 4 ("= 6" in both equations & context sentence)
+  const [doubleIntroStage, setDoubleIntroStage] = useState<number>(0);
+  const doubleIntroTimersRef = useRef<NodeJS.Timeout[]>([]);
+
+  const clearDoubleIntroTimers = useCallback(() => {
+    doubleIntroTimersRef.current.forEach((t) => clearTimeout(t));
+    doubleIntroTimersRef.current = [];
+  }, []);
+
+  const startDoubleIntroAnimation = useCallback(() => {
+    clearDoubleIntroTimers();
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      setDoubleIntroStage(4);
+      return;
+    }
+
+    setDoubleIntroStage(0);
+    const stageIntervalMs = 800;
+    const timers: NodeJS.Timeout[] = [
+      setTimeout(() => setDoubleIntroStage(1), stageIntervalMs * 1),
+      setTimeout(() => setDoubleIntroStage(2), stageIntervalMs * 2),
+      setTimeout(() => setDoubleIntroStage(3), stageIntervalMs * 3),
+      setTimeout(() => setDoubleIntroStage(4), stageIntervalMs * 4),
+    ];
+    doubleIntroTimersRef.current = timers;
+  }, [clearDoubleIntroTimers]);
+
+  useEffect(() => {
+    if (phase === "strategy_intro" && lesson.id === 2) {
+      startDoubleIntroAnimation();
+
+      if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+        const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const handleMotionChange = (e: MediaQueryListEvent) => {
+          if (e.matches) {
+            clearDoubleIntroTimers();
+            setDoubleIntroStage(4);
+          }
+        };
+        mediaQuery.addEventListener?.("change", handleMotionChange);
+        return () => {
+          mediaQuery.removeEventListener?.("change", handleMotionChange);
+          clearDoubleIntroTimers();
+        };
+      }
+    }
+    return () => {
+      clearDoubleIntroTimers();
+    };
+  }, [clearDoubleIntroTimers, lesson.id, phase, startDoubleIntroAnimation]);
+
   // P0: Student Snapshot on Mount — ensures "Leave Without Saving" restores exact state
   const initialStudentSnapshotRef = useRef<StudentProfile | null>(null);
   useEffect(() => {
@@ -197,6 +254,7 @@ export function LessonEngine({
 
   // Start Step 2 "I Do" Check-for-Understanding Screen (Strictly Separate from Drill)
   const handleStartModelCheck = () => {
+    clearDoubleIntroTimers();
     setPhase("model");
     setPhaseStepIndex(0);
     setCheckStepIndex(0);
@@ -732,7 +790,13 @@ export function LessonEngine({
             <button
               onClick={() => {
                 if (phase === "strategy_intro") {
-                  speak(checkExplanation?.strategyOverview || lesson.ruleSummary);
+                  if (lesson.id === 2) {
+                    speak(
+                      "Multiply by 2: Double the Other Number. 2 times 3 equals 6. Two groups of 3. Double 3: 3 plus 3 equals 6. Two 3-point baskets score 6 points."
+                    );
+                  } else {
+                    speak(checkExplanation?.strategyOverview || lesson.ruleSummary);
+                  }
                 } else if (isErrorCorrecting && correctionExplanation) {
                   speak(correctionExplanation.strategyOverview);
                 } else {
@@ -794,8 +858,10 @@ export function LessonEngine({
           />
         </div>
 
-        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check and during bare Gate while answering) */}
-        {phase !== "model" && (phase !== "checkout" || Boolean(gateFeedback)) && (
+        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check, Lesson 2 Strategy Intro, and bare Gate while answering) */}
+        {phase !== "model" &&
+          !(phase === "strategy_intro" && lesson.id === 2) &&
+          (phase !== "checkout" || Boolean(gateFeedback)) && (
           <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
             <span className="truncate">
               {phase === "review" ? (
@@ -823,65 +889,202 @@ export function LessonEngine({
       <div className="w-full max-w-lg mx-auto flex-1 flex flex-col justify-center min-h-0 py-1">
         {/* PHASE 1: STRATEGY OVERVIEW */}
         {phase === "strategy_intro" && checkExplanation ? (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/70 border border-white/15 p-3.5 flex flex-col gap-2.5 text-left max-h-[500px]"
-          >
-            {/* Headline Math Fact Banner */}
-            <HeadlineMathFactBanner
-              a={currentFact.a}
-              b={currentFact.b}
-              product={currentFact.product}
-              label={checkExplanation.ruleName}
-              strategyName={lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.ruleName}
-              strategyText={checkExplanation.strategyOverview}
-              repeatedAddition={
-                lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.repeatedAddition
-              }
-            />
+          lesson.id === 2 ? (
+            /* LESSON 2 (×2) STRATEGY OVERVIEW: Mature, Clear, Uncluttered Sequential Demonstration */
+            <div className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/75 border-2 border-cyan-500/40 p-4 sm:p-5 flex flex-col items-center gap-3 text-center shadow-2xl">
+              {/* 1. Single Main Heading */}
+              <h1 className="text-base sm:text-lg font-black text-cyan-300 tracking-tight">
+                Multiply by 2: Double the Other Number
+              </h1>
 
-            {/* Context Lead-In (Only rendered when non-empty; omitted in Lesson 3 ×5 & Lesson 4 ×3) */}
-            {checkExplanation.contextLeadIn && (
-              <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
-                <span className="font-bold text-cyan-300">Context: </span>
-                {checkExplanation.contextLeadIn}
-              </div>
-            )}
-
-            {/* Worked Example Steps (Omitted in Lesson 3 ×5 & Lesson 4 ×3 where the full worked sequence is in the main explanation) */}
-            {lesson.id !== 3 && lesson.id !== 4 && (
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
-                  Worked Example Steps:
+              {/* 2. Large Equation: 2 × 3 = 6 (space reserved for "= 6") */}
+              <div
+                className="inline-flex items-center justify-center font-mono font-black text-4xl sm:text-5xl tracking-tight py-0.5"
+                aria-label="2 times 3 equals 6"
+              >
+                <span className="text-sky-300">2</span>
+                <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">×</span>
+                <span className="text-purple-300">3</span>
+                <span
+                  className={`inline-flex items-center transition-opacity duration-300 ${
+                    doubleIntroStage >= 4 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">=</span>
+                  <span className="text-amber-300">6</span>
                 </span>
-                {checkExplanation.steps.slice(0, 2).map((st) => (
-                  <div
-                    key={st.stepNumber}
-                    className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
-                  >
-                    <span className="font-bold text-white/80 text-[11px]">
-                      Step {st.stepNumber}: {st.label}
-                    </span>
-                    <FormattedEquation
-                      mathString={st.math}
-                      factorA={currentFact.a}
-                      factorB={currentFact.b}
-                      size="sm"
-                    />
-                  </div>
-                ))}
               </div>
-            )}
 
-            <button
-              onClick={handleStartModelCheck}
-              className="w-full h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
+              {/* 3. Two Distinct Groups of Three Dots (HTML/CSS circles, subtle cyan outline, purple dots & labels) */}
+              <div
+                role="img"
+                aria-label="Two groups with three dots in each group, making six dots altogether."
+                className="grid grid-cols-2 gap-3 w-full max-w-xs mx-auto"
+              >
+                {/* Group 1 */}
+                <div
+                  aria-hidden="true"
+                  className={`rounded-xl border border-cyan-400/40 bg-cyan-950/20 px-4 py-3 flex flex-col items-center justify-center gap-2 transition-opacity duration-300 ${
+                    doubleIntroStage >= 1 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <div className="flex flex-row items-center justify-center gap-2.5">
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                  </div>
+                  <span className="text-purple-300 font-mono font-black text-sm leading-none">
+                    3
+                  </span>
+                </div>
+
+                {/* Group 2 */}
+                <div
+                  aria-hidden="true"
+                  className={`rounded-xl border border-cyan-400/40 bg-cyan-950/20 px-4 py-3 flex flex-col items-center justify-center gap-2 transition-opacity duration-300 ${
+                    doubleIntroStage >= 2 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <div className="flex flex-row items-center justify-center gap-2.5">
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                    <span className="w-4 h-4 rounded-full bg-purple-400 shadow-sm" />
+                  </div>
+                  <span className="text-purple-300 font-mono font-black text-sm leading-none">
+                    3
+                  </span>
+                </div>
+              </div>
+
+              {/* 4. Below the groups: "Two groups of 3.", "Double 3:", and "3 + 3 = 6" */}
+              <div className="flex flex-col items-center gap-1.5 w-full">
+                <p
+                  className={`text-sm sm:text-base font-bold text-slate-200 transition-opacity duration-300 ${
+                    doubleIntroStage >= 2 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-sky-300 font-black">Two</span> groups of{" "}
+                  <span className="text-purple-300 font-mono font-black">3</span>.
+                </p>
+
+                <div
+                  className={`flex flex-col items-center gap-0.5 transition-opacity duration-300 ${
+                    doubleIntroStage >= 3 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-xs sm:text-sm font-bold text-slate-300">
+                    Double <span className="text-purple-300 font-mono font-black">3</span>:
+                  </span>
+                  <div
+                    className="inline-flex items-center justify-center font-mono font-black text-2xl sm:text-3xl tracking-tight"
+                    aria-label="3 plus 3 equals 6"
+                  >
+                    <span className="text-purple-300">3</span>
+                    <span className="text-slate-300 mx-2 font-bold">+</span>
+                    <span className="text-purple-300">3</span>
+                    <span
+                      className={`inline-flex items-center transition-opacity duration-300 ${
+                        doubleIntroStage >= 4 ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      <span className="text-slate-300 mx-2 font-bold">=</span>
+                      <span className="text-amber-300">6</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Short Context Sentence */}
+              <p
+                className={`text-xs sm:text-sm text-slate-300 font-medium px-3 py-1.5 rounded-xl bg-cyan-950/30 border border-cyan-500/25 w-full transition-opacity duration-300 ${
+                  doubleIntroStage >= 4 ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                Two 3-point baskets score 6 points.
+              </p>
+
+              {/* 6. Replay & Try One Controls (>= 44x44px touch targets) */}
+              <div className="flex items-center gap-2.5 w-full pt-1">
+                <button
+                  type="button"
+                  onClick={startDoubleIntroAnimation}
+                  className="min-h-[44px] min-w-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer touch-manipulation"
+                >
+                  <RotateCcw className="w-4 h-4 text-cyan-300" />
+                  <span>Replay</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleStartModelCheck}
+                  className="flex-1 min-h-[44px] rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
+                >
+                  <span>Try One</span>
+                  <ArrowRight className="w-4 h-4 stroke-[3]" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/70 border border-white/15 p-3.5 flex flex-col gap-2.5 text-left max-h-[500px]"
             >
-              <span>Continue to Check</span>
-              <ArrowRight className="w-4 h-4 stroke-[3]" />
-            </button>
-          </motion.div>
+              {/* Headline Math Fact Banner */}
+              <HeadlineMathFactBanner
+                a={currentFact.a}
+                b={currentFact.b}
+                product={currentFact.product}
+                label={checkExplanation.ruleName}
+                strategyName={lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.ruleName}
+                strategyText={checkExplanation.strategyOverview}
+                repeatedAddition={
+                  lesson.id === 3 || lesson.id === 4 ? undefined : checkExplanation.repeatedAddition
+                }
+              />
+
+              {/* Context Lead-In (Only rendered when non-empty; omitted in Lesson 3 ×5 & Lesson 4 ×3) */}
+              {checkExplanation.contextLeadIn && (
+                <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200">
+                  <span className="font-bold text-cyan-300">Context: </span>
+                  {checkExplanation.contextLeadIn}
+                </div>
+              )}
+
+              {/* Worked Example Steps (Omitted in Lesson 3 ×5 & Lesson 4 ×3 where the full worked sequence is in the main explanation) */}
+              {lesson.id !== 3 && lesson.id !== 4 && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-bold text-white/50 uppercase tracking-wider">
+                    Worked Example Steps:
+                  </span>
+                  {checkExplanation.steps.slice(0, 2).map((st) => (
+                    <div
+                      key={st.stepNumber}
+                      className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
+                    >
+                      <span className="font-bold text-white/80 text-[11px]">
+                        Step {st.stepNumber}: {st.label}
+                      </span>
+                      <FormattedEquation
+                        mathString={st.math}
+                        factorA={currentFact.a}
+                        factorB={currentFact.b}
+                        size="sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={handleStartModelCheck}
+                className="w-full h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
+              >
+                <span>Continue to Check</span>
+                <ArrowRight className="w-4 h-4 stroke-[3]" />
+              </button>
+            </motion.div>
+          )
         ) : phase === "model" && checkExplanation ? (
           /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Shows ONLY the question, groups visual, and answer box until submission) */
           <motion.div
