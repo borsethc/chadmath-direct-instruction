@@ -575,8 +575,10 @@ const teacherRouteSrc = fs.readFileSync(path.join(repoRoot, "src/app/dashboard/p
 const pinModalSrc = fs.readFileSync(path.join(repoRoot, "src/components/TeacherPinModal.tsx"), "utf8");
 
 assert(
-  !loginSrc.includes("Teacher Portal") && !loginSrc.includes("Add New Student"),
-  `StudentLogin has no "View Teacher Portal" link and no "+ Add New Student" button`
+  !loginSrc.includes("Teacher Portal") &&
+    loginSrc.includes("Create Student Profile") &&
+    loginSrc.includes("createNewStudent"),
+  `StudentLogin has no "View Teacher Portal" link and allows entering a new user when history/storage is cleared`
 );
 assert(
   !navbarSrc.includes("Teacher") && !dashboardSrc.includes("Teacher Portal") && !homePageSrc.includes("TeacherDashboard"),
