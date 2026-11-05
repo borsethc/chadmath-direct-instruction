@@ -880,19 +880,13 @@ export function LessonEngine({
             </button>
           </motion.div>
         ) : phase === "model" && checkExplanation ? (
-          /* PHASE 2: "I DO" STAGED CHECK-FOR-UNDERSTANDING (Reveals one step at a time; visual always totals expectedAnswer) */
+          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Shows ONLY the question, groups visual, and answer box until submission) */
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3.5 flex flex-col items-center gap-2.5 text-center my-auto"
           >
-            {checkExplanation.checkSteps && checkExplanation.checkSteps.length > 1 && (
-              <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-black uppercase tracking-wider">
-                Step {checkStepIndex + 1} of {checkExplanation.checkSteps.length}
-              </span>
-            )}
-
-            {/* 1. Staged Check Question */}
+            {/* 1. Product-Anchored Check Question */}
             <div className="px-3.5 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-100 text-xs sm:text-sm font-bold w-full leading-relaxed">
               <HighlightedStrategyText
                 text={activeCheckStep.prompt}
