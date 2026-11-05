@@ -534,8 +534,20 @@ assert(
   `Lesson 4 (3 × 4) check stages Step 1 (2×4=8) and Step 2 (3×4=12) separately`
 );
 
-// General rule: in every lesson's checkSteps, the visible groups total equals expectedAnswer
-for (const lesson of DI_LESSONS) {
+// 22. Lesson 2 strategy check fix: asks which number was doubled with 2 groups of 3 dots, answer 3, and confirmation feedback only after submission
+assert(
+  l2_3.checkSteps.length === 1 &&
+    l2_3.checkSteps[0].prompt === "2 × 3 = 6. We got 6 by doubling a number. Which number did we double?" &&
+    l2_3.checkSteps[0].expectedAnswer === 3 &&
+    l2_3.checkSteps[0].visual.a === 2 &&
+    l2_3.checkSteps[0].visual.b === 3 &&
+    l2_3.checkSteps[0].hint === "In 2 × 3 = 6, we doubled 3 (3 + 3 = 6).",
+  `Lesson 2 strategy check asks which number was doubled (answer: 3) with 2 groups of 3 dots and post-submission feedback "In 2 × 3 = 6, we doubled 3 (3 + 3 = 6)."`
+);
+
+// Staged multi-step lessons (1, 4, 5, 8, 10, 11): visible groups total equals expectedAnswer at each staged step
+for (const lessonId of [1, 4, 5, 8, 10, 11]) {
+  const lesson = DI_LESSONS.find((l) => l.id === lessonId);
   const tf = lesson.targetFacts[0];
   const exp = getDynamicRuleExplanation(lesson.id, tf.a, tf.b);
   for (let idx = 0; idx < exp.checkSteps.length; idx++) {

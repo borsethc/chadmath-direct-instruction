@@ -329,7 +329,7 @@ export function LessonEngine({
         } else {
           soundEffects.playIncorrect();
           setCheckFeedback(null);
-          setErrorMessage(activeStep.hint || "Review the step and try again!");
+          setErrorMessage("Not quite — try again!");
           setTypedAnswer(""); // Clear wrong entry automatically
         }
         return;
@@ -517,6 +517,7 @@ export function LessonEngine({
     },
     [
       checkExplanation,
+      checkStepIndex,
       checkoutFacts,
       checkoutResults,
       currentFact,
@@ -550,7 +551,9 @@ export function LessonEngine({
       const num = parseInt(sanitized, 10);
       const targetExpected =
         phase === "model"
-          ? (checkExplanation?.checkQuestion.expectedAnswer ?? currentFact.product)
+          ? (checkExplanation?.checkSteps?.[checkStepIndex]?.expectedAnswer ??
+            checkExplanation?.checkQuestion.expectedAnswer ??
+            currentFact.product)
           : currentFact.product;
 
       const isTargetSingleDigit = targetExpected < 10;
@@ -583,7 +586,7 @@ export function LessonEngine({
         }, 400);
       }
     },
-    [checkExplanation, currentFact.product, evaluateAnswer, phase]
+    [checkExplanation, checkStepIndex, currentFact.product, evaluateAnswer, phase]
   );
 
   // Physical keyboard support

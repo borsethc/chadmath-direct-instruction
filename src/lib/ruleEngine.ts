@@ -474,16 +474,10 @@ export function getDynamicRuleExplanation(
       steps,
       conclusion: `${factorA} × ${factorB} = ${product}`,
       checkQuestion: checkQ,
-      checkQuestionVisual: { a: 1, b: n },
+      checkQuestionVisual: { a: 2, b: n },
       checkSteps: [
         {
           ...checkQ,
-          visual: { a: 1, b: n },
-        },
-        {
-          prompt: `Double ${n}. What is ${n} + ${n}?`,
-          expectedAnswer: product,
-          hint: `Two groups of ${n} make ${product} (${n} + ${n} = ${product}).`,
           visual: { a: 2, b: n },
         },
       ],
@@ -513,9 +507,9 @@ export function getDynamicRuleExplanation(
     const lastDigit = product % 10;
 
     const checkQ = {
-      prompt: `${factorA} × ${factorB} = ${product}. Count by 5s ${timesWords[n] || `${n} times`}: ${countSequence}. What total do ${n} groups of 5 make?`,
-      expectedAnswer: product,
-      hint: `In ${factorA} × ${factorB} = ${product}, counting by 5s ${timesWords[n] || `${n} times`} (${countSequence}) gives ${product}.`,
+      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by counting by 5s (${countSequence}). How many times did we count by 5?`,
+      expectedAnswer: n,
+      hint: `In ${factorA} × ${factorB} = ${product}, we counted by 5s ${timesWords[n] || `${n} times`}: ${countSequence}.`,
     };
 
     return {
@@ -663,14 +657,7 @@ export function getDynamicRuleExplanation(
     const step1Check: StagedCheckStep = {
       prompt: `${factorA} × ${factorB} = ${product}. Step 1 is finding the tens digit (1 less than ${n}). What is ${n} - 1?`,
       expectedAnswer: tens,
-      hint: `In ${factorA} × ${factorB} = ${product}, ${n} minus 1 is ${tens}.`,
-      visual: { a: 1, b: tens },
-    };
-
-    const step2Check: StagedCheckStep = {
-      prompt: `The tens digit is ${tens} and the ones digit is ${units} (${tens} + ${units} = 9). What is ${factorA} × ${factorB}?`,
-      expectedAnswer: product,
-      hint: `Tens digit ${tens} and ones digit ${units} make ${product} (${factorA} × ${factorB} = ${product}).`,
+      hint: `In ${factorA} × ${factorB} = ${product}, ${n} minus 1 is ${tens} (and ${tens} + ${units} = 9, so ${product}!).`,
       visual: { a: 9, b: n },
     };
 
@@ -700,8 +687,8 @@ export function getDynamicRuleExplanation(
         expectedAnswer: step1Check.expectedAnswer,
         hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 1, b: tens },
-      checkSteps: [step1Check, step2Check],
+      checkQuestionVisual: { a: 9, b: n },
+      checkSteps: [step1Check],
       repeatedAddition: `Tens: ${n}-1 = ${tens}, Ones: 9-${tens} = ${units} → ${product}`,
     };
   }
@@ -720,14 +707,7 @@ export function getDynamicRuleExplanation(
     const step1Check: StagedCheckStep = {
       prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by multiplying a number by itself in a square grid. Which number did we multiply by itself?`,
       expectedAnswer: factorA,
-      hint: `In ${factorA} × ${factorB} = ${product}, each row of the square has ${factorA} items.`,
-      visual: { a: 1, b: factorA },
-    };
-
-    const step2Check: StagedCheckStep = {
-      prompt: `Combine all ${factorA} rows of ${factorB} in the square. What is ${factorA} × ${factorB}?`,
-      expectedAnswer: product,
-      hint: `${factorA} rows of ${factorB} make ${product} (${factorA} × ${factorB} = ${product}).`,
+      hint: `In ${factorA} × ${factorB} = ${product}, we multiplied ${factorA} by itself (${factorA} × ${factorA} = ${product}).`,
       visual: { a: factorA, b: factorB },
     };
 
@@ -757,8 +737,8 @@ export function getDynamicRuleExplanation(
         expectedAnswer: step1Check.expectedAnswer,
         hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 1, b: factorA },
-      checkSteps: [step1Check, step2Check],
+      checkQuestionVisual: { a: factorA, b: factorB },
+      checkSteps: [step1Check],
       repeatedAddition: `Square: ${factorA} × ${factorB} = ${product} [Squares: 25, 36, 49, 64, 81]`,
     };
   }
@@ -821,23 +801,9 @@ export function getDynamicRuleExplanation(
     const d2 = d1 * 2;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is the first double: Double ${n}. What is ${n} + ${n}?`,
-      expectedAnswer: d1,
-      hint: `First double: ${n} + ${n} = ${d1}.`,
-      visual: { a: 2, b: n },
-    };
-
-    const step2Check: StagedCheckStep = {
-      prompt: `Step 2 is the second double: Double ${d1}. What is ${d1} + ${d1}?`,
-      expectedAnswer: d2,
-      hint: `Second double: ${d1} + ${d1} = ${d2}.`,
-      visual: { a: 4, b: n },
-    };
-
-    const step3Check: StagedCheckStep = {
-      prompt: `Step 3 is the third double: Double ${d2}. What is ${d2} + ${d2}?`,
-      expectedAnswer: product,
-      hint: `Third double: ${d2} + ${d2} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
+      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by doubling a number three times (${n} → ${d1} → ${d2} → ${product}). Which number did we start with and double first?`,
+      expectedAnswer: n,
+      hint: `In ${factorA} × ${factorB} = ${product}, we started with ${n} and doubled it three times: ${n} + ${n} = ${d1}, ${d1} + ${d1} = ${d2}, ${d2} + ${d2} = ${product}.`,
       visual: { a: 8, b: n },
     };
 
@@ -872,8 +838,8 @@ export function getDynamicRuleExplanation(
         expectedAnswer: step1Check.expectedAnswer,
         hint: step1Check.hint,
       },
-      checkQuestionVisual: { a: 2, b: n },
-      checkSteps: [step1Check, step2Check, step3Check],
+      checkQuestionVisual: { a: 8, b: n },
+      checkSteps: [step1Check],
       repeatedAddition: `Triple-Double: ${n} → ${d1} → ${d2} → ${product}`,
     };
   }
