@@ -137,9 +137,11 @@ export function LessonEngine({
   const questionStartTimeRef = useRef<number>(Date.now());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Lesson 2 (Multiply by 2) Strategy Overview Sequential Demonstration State
-  // Stages: 0 ("2 × 3") -> 1 (first group of 3 dots) -> 2 (second group of 3 dots + "Two groups of 3.") -> 3 ("Double 3:" & "3 + 3") -> 4 ("= 6" in both equations & context sentence)
+  // Lesson 2 (×2) & Lesson 3 (×5) Strategy Overview Sequential Demonstration State
+  // Lesson 2 Stages: 0..4 (800ms intervals)
+  // Lesson 3 Stages: 0 ("5 × 3") -> 1 (group 1 & running total 5) -> 2 (group 2 & running total 10) -> 3 (group 3 & running total 15) -> 4 ("5 + 5 + 5 = 15" & conclusion) -> 5 ("= 15" in main equation) (900ms intervals)
   const [doubleIntroStage, setDoubleIntroStage] = useState<number>(0);
+  const [fivesIntroStage, setFivesIntroStage] = useState<number>(0);
   const doubleIntroTimersRef = useRef<NodeJS.Timeout[]>([]);
 
   const clearDoubleIntroTimers = useCallback(() => {
@@ -170,9 +172,37 @@ export function LessonEngine({
     doubleIntroTimersRef.current = timers;
   }, [clearDoubleIntroTimers]);
 
+  const startFivesIntroAnimation = useCallback(() => {
+    clearDoubleIntroTimers();
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      setFivesIntroStage(5);
+      return;
+    }
+
+    setFivesIntroStage(0);
+    const stageIntervalMs = 900;
+    const timers: NodeJS.Timeout[] = [
+      setTimeout(() => setFivesIntroStage(1), stageIntervalMs * 1),
+      setTimeout(() => setFivesIntroStage(2), stageIntervalMs * 2),
+      setTimeout(() => setFivesIntroStage(3), stageIntervalMs * 3),
+      setTimeout(() => setFivesIntroStage(4), stageIntervalMs * 4),
+      setTimeout(() => setFivesIntroStage(5), stageIntervalMs * 5),
+    ];
+    doubleIntroTimersRef.current = timers;
+  }, [clearDoubleIntroTimers]);
+
   useEffect(() => {
-    if (phase === "strategy_intro" && lesson.id === 2) {
-      startDoubleIntroAnimation();
+    if (phase === "strategy_intro" && (lesson.id === 2 || lesson.id === 3)) {
+      if (lesson.id === 2) {
+        startDoubleIntroAnimation();
+      } else {
+        startFivesIntroAnimation();
+      }
 
       if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
         const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -180,6 +210,7 @@ export function LessonEngine({
           if (e.matches) {
             clearDoubleIntroTimers();
             setDoubleIntroStage(4);
+            setFivesIntroStage(5);
           }
         };
         mediaQuery.addEventListener?.("change", handleMotionChange);
@@ -192,7 +223,7 @@ export function LessonEngine({
     return () => {
       clearDoubleIntroTimers();
     };
-  }, [clearDoubleIntroTimers, lesson.id, phase, startDoubleIntroAnimation]);
+  }, [clearDoubleIntroTimers, lesson.id, phase, startDoubleIntroAnimation, startFivesIntroAnimation]);
 
   // P0: Student Snapshot on Mount — ensures "Leave Without Saving" restores exact state
   const initialStudentSnapshotRef = useRef<StudentProfile | null>(null);
@@ -764,7 +795,7 @@ export function LessonEngine({
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-base sm:text-lg shrink-0">{lesson.icon}</span>
             <div className="flex flex-col min-w-0">
-              <span className="text-xs font-black text-white truncate">{lesson.title}</span>
+              <span className="text-xs font-black text-white leading-tight break-words">{lesson.title}</span>
               <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">
                 {phase === "strategy_intro"
                   ? "Strategy Overview"
@@ -793,6 +824,10 @@ export function LessonEngine({
                   if (lesson.id === 2) {
                     speak(
                       "Multiply by 2: Double the Other Number. 2 times 3 equals 6. Two groups of 3. Double 3: 3 plus 3 equals 6. Two 3-point baskets score 6 points."
+                    );
+                  } else if (lesson.id === 3) {
+                    speak(
+                      "Multiply by 5: Count by 5s. 5 times 3 equals 15. Count by 5s three times. 5 times 3 equals 3 times 5. We can use three groups of 5. 5, 10, 15. 5 plus 5 plus 5 equals 15. Three counts of 5 make 15."
                     );
                   } else {
                     speak(checkExplanation?.strategyOverview || lesson.ruleSummary);
@@ -858,9 +893,9 @@ export function LessonEngine({
           />
         </div>
 
-        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check, Lesson 2 Strategy Intro, and bare Gate while answering) */}
+        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check, Lesson 2/3 Strategy Intro, and bare Gate while answering) */}
         {phase !== "model" &&
-          !(phase === "strategy_intro" && lesson.id === 2) &&
+          !(phase === "strategy_intro" && (lesson.id === 2 || lesson.id === 3)) &&
           (phase !== "checkout" || Boolean(gateFeedback)) && (
           <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
             <span className="truncate">
@@ -1008,6 +1043,164 @@ export function LessonEngine({
                 <button
                   type="button"
                   onClick={startDoubleIntroAnimation}
+                  className="min-h-[44px] min-w-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer touch-manipulation"
+                >
+                  <RotateCcw className="w-4 h-4 text-cyan-300" />
+                  <span>Replay</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleStartModelCheck}
+                  className="flex-1 min-h-[44px] rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
+                >
+                  <span>Try One</span>
+                  <ArrowRight className="w-4 h-4 stroke-[3]" />
+                </button>
+              </div>
+            </div>
+          ) : lesson.id === 3 ? (
+            /* LESSON 3 (×5) STRATEGY OVERVIEW: Simplified Sequential Demonstration with 5-on-a-Die Dot Groups & Running Totals */
+            <div className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/75 border-2 border-cyan-500/40 p-3.5 sm:p-5 flex flex-col items-center gap-2.5 text-center shadow-2xl">
+              {/* 1. Single Main Heading */}
+              <h1 className="text-base sm:text-lg font-black text-cyan-300 tracking-tight">
+                Multiply by 5: Count by 5s
+              </h1>
+
+              {/* 2. Main Equation: 5 × 3 = 15 (space reserved for "= 15" until stage 5) */}
+              <div
+                className="inline-flex items-center justify-center font-mono font-black text-4xl sm:text-5xl tracking-tight"
+                aria-label="5 times 3 equals 15"
+              >
+                <span className="text-sky-300">5</span>
+                <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">×</span>
+                <span className="text-purple-300">3</span>
+                <span
+                  className={`inline-flex items-center transition-opacity duration-300 ${
+                    fivesIntroStage >= 5 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">=</span>
+                  <span className="text-amber-300">15</span>
+                </span>
+              </div>
+
+              {/* 3. Brief Explanation & Mathematical Consistency Bridge */}
+              <div className="flex flex-col items-center gap-0.5">
+                <p className="text-sm sm:text-base font-bold text-slate-100">
+                  Count by <span className="text-sky-300 font-mono font-black">5</span>s{" "}
+                  <span className="text-purple-300 font-black">three</span> times.
+                </p>
+                <p className="text-xs text-slate-300 font-medium">
+                  <span className="text-sky-300 font-mono font-bold">5</span>
+                  <span className="text-slate-300 mx-1">×</span>
+                  <span className="text-purple-300 font-mono font-bold">3</span>
+                  <span className="text-slate-300 mx-1">=</span>
+                  <span className="text-purple-300 font-mono font-bold">3</span>
+                  <span className="text-slate-300 mx-1">×</span>
+                  <span className="text-sky-300 font-mono font-bold">5</span>. We can use{" "}
+                  <span className="text-purple-300 font-bold">three groups</span> of{" "}
+                  <span className="text-sky-300 font-mono font-bold">5</span>.
+                </p>
+              </div>
+
+              {/* 4. Three Groups of Five Dots (5-on-a-die layout) + Running Total Row */}
+              <div
+                role="img"
+                aria-label="Three groups of five dots. Counting by fives gives five, ten, fifteen."
+                className="w-full max-w-xs mx-auto flex flex-col items-center gap-1.5"
+              >
+                {/* "3 groups" label in purple above diagram */}
+                <span
+                  aria-hidden="true"
+                  className="text-xs font-black uppercase tracking-wider text-purple-300"
+                >
+                  3 groups
+                </span>
+
+                {/* Three side-by-side 5-dot die groups */}
+                <div aria-hidden="true" className="grid grid-cols-3 gap-2 sm:gap-3 w-full">
+                  {[1, 2, 3].map((groupIndex) => (
+                    <div
+                      key={groupIndex}
+                      className={`rounded-xl border border-cyan-400/40 bg-cyan-950/20 py-2.5 px-2 flex flex-col items-center justify-center transition-opacity duration-300 ${
+                        fivesIntroStage >= groupIndex ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      {/* 5-on-a-die HTML/CSS dot arrangement */}
+                      <div className="grid grid-cols-3 grid-rows-3 gap-1.5 w-11 h-11 p-0.5 items-center justify-items-center">
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm col-start-1 row-start-1" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm col-start-3 row-start-1" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm col-start-2 row-start-2" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm col-start-1 row-start-3" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm col-start-3 row-start-3" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Running Total Row */}
+                <div aria-hidden="true" className="w-full flex flex-col items-center gap-0.5 pt-0.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Running total
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full text-center font-mono font-black text-lg sm:text-xl">
+                    <span
+                      className={`text-white transition-opacity duration-300 ${
+                        fivesIntroStage >= 1 ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      5
+                    </span>
+                    <span
+                      className={`text-white transition-opacity duration-300 ${
+                        fivesIntroStage >= 2 ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      10
+                    </span>
+                    <span
+                      className={`text-amber-300 transition-opacity duration-300 ${
+                        fivesIntroStage >= 3 ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      15
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Repeated Addition & Conclusion ("5 + 5 + 5 = 15" and "Three counts of 5 make 15.") */}
+              <div
+                className={`flex flex-col items-center gap-1 transition-opacity duration-300 ${
+                  fivesIntroStage >= 4 ? "opacity-100" : "opacity-0"
+                }`}
+              >
+                <div
+                  className="inline-flex items-center justify-center font-mono font-black text-xl sm:text-2xl tracking-tight"
+                  aria-label="5 plus 5 plus 5 equals 15"
+                >
+                  <span className="text-sky-300">5</span>
+                  <span className="text-slate-300 mx-1.5 font-bold">+</span>
+                  <span className="text-sky-300">5</span>
+                  <span className="text-slate-300 mx-1.5 font-bold">+</span>
+                  <span className="text-sky-300">5</span>
+                  <span className="text-slate-300 mx-1.5 font-bold">=</span>
+                  <span className="text-amber-300">15</span>
+                </div>
+
+                <p className="text-xs sm:text-sm font-bold text-slate-200">
+                  <span className="text-purple-300 font-black">Three</span> counts of{" "}
+                  <span className="text-sky-300 font-mono font-black">5</span> make{" "}
+                  <span className="text-amber-300 font-mono font-black">15</span>.
+                </p>
+              </div>
+
+              {/* 6. Replay & Try One Controls (>= 44x44px touch targets) */}
+              <div className="flex items-center gap-2.5 w-full pt-0.5">
+                <button
+                  type="button"
+                  onClick={startFivesIntroAnimation}
                   className="min-h-[44px] min-w-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer touch-manipulation"
                 >
                   <RotateCcw className="w-4 h-4 text-cyan-300" />

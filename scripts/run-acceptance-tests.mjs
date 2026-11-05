@@ -613,6 +613,19 @@ assert(
   `Lesson 2 Strategy Overview displays "Multiply by 2: Double the Other Number", accessible purple dot groups, staged animation with Replay & prefers-reduced-motion, context sentence, and "Try One" button`
 );
 
+// 25. Lesson 3 (Multiply by 5: Count by 5s) Strategy Overview Screen Update
+assert(
+  lessonEngineSrc.includes("Multiply by 5: Count by 5s") &&
+    lessonEngineSrc.includes(
+      'aria-label="Three groups of five dots. Counting by fives gives five, ten, fifteen."'
+    ) &&
+    lessonEngineSrc.includes("3 groups") &&
+    lessonEngineSrc.includes("Running total") &&
+    lessonEngineSrc.includes("startFivesIntroAnimation") &&
+    lessonEngineSrc.includes("col-start-2 row-start-2"),
+  `Lesson 3 Strategy Overview displays "Multiply by 5: Count by 5s", 5-on-a-die dot groups, "3 groups" label, "Running total" row (5, 10, 15), bridge text, and staged animation`
+);
+
 console.log("\n==========================================");
 if (testFailures === 0) {
   console.log("🎉 ALL ACCEPTANCE TESTS PASSED (0 failures)!");
