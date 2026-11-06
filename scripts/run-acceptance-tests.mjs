@@ -19,7 +19,20 @@ import {
   getActiveStudentId,
   setActiveStudentId,
   USER_COOKIE_KEY,
+  authenticatePortalPin,
+  loadStudentsForTeacher,
+  createNewStudent,
+  getOrCreateGuestLearnerId,
+  getOrCreateGuestProfile,
 } from "../src/lib/storage.ts";
+import {
+  ActiveLearningTimer,
+  applyAnalyticsEvent,
+  buildAppAnalyticsReport,
+  createEmptyAnalyticsStore,
+  formatActiveDuration,
+  verifyOwnerAnalyticsAccess,
+} from "../src/lib/analytics.ts";
 
 console.log("🚀 Running ChadMath DI Acceptance Test Suite...");
 
@@ -406,10 +419,10 @@ for (const lesson of DI_LESSONS) {
   );
 }
 
-// 18. Check-question wording fix: Product-anchored questions across all lessons & no "other factor"
+// 18. Check-question wording fix: Fact-badge-anchored questions across all lessons (no trailing period after badge) & no "other factor"
 assert(
-  l2_3.checkQuestion.prompt === "2 × 3 = 6. We got 6 by doubling a number. Which number did we double?",
-  `Lesson 2 (2 × 3) check question matches exact product-anchored pattern: "${l2_3.checkQuestion.prompt}"`
+  l2_3.checkQuestion.prompt === "2 × 3 = 6\nWhat number did we double to get 6 2 or 3?",
+  `Lesson 2 (2 × 3) check question matches exact badge-anchored pattern without trailing period: "${l2_3.checkQuestion.prompt}"`
 );
 assert(
   l2_3.checkQuestion.expectedAnswer === 3,
@@ -419,8 +432,9 @@ for (const lesson of DI_LESSONS) {
   const tf = lesson.targetFacts[0];
   const exp = getDynamicRuleExplanation(lesson.id, tf.a, tf.b);
   assert(
-    exp.checkQuestion.prompt.startsWith(`${tf.a} × ${tf.b} = ${tf.product}.`),
-    `Lesson ${lesson.id} check question starts with fact and product "${tf.a} × ${tf.b} = ${tf.product}.": "${exp.checkQuestion.prompt}"`
+    exp.checkQuestion.prompt.startsWith(`${tf.a} × ${tf.b}\n`) ||
+      exp.checkQuestion.prompt.startsWith(`${tf.a} × ${tf.b} = ${tf.product}\n`),
+    `Lesson ${lesson.id} check question starts with standalone math badge (no trailing period): "${exp.checkQuestion.prompt}"`
   );
   assert(
     !exp.strategyOverview.toLowerCase().includes("other factor") &&
@@ -537,12 +551,13 @@ assert(
 // 22. Lesson 2 strategy check fix: asks which number was doubled with 2 groups of 3 dots, answer 3, and confirmation feedback only after submission
 assert(
   l2_3.checkSteps.length === 1 &&
-    l2_3.checkSteps[0].prompt === "2 × 3 = 6. We got 6 by doubling a number. Which number did we double?" &&
+    l2_3.checkSteps[0].prompt === "2 × 3 = 6\nWhat number did we double to get 6 2 or 3?" &&
+    l2_7.checkSteps[0].prompt === "2 × 7 = 14\nWhat number did we double to get 14 2 or 7?" &&
     l2_3.checkSteps[0].expectedAnswer === 3 &&
     l2_3.checkSteps[0].visual.a === 2 &&
     l2_3.checkSteps[0].visual.b === 3 &&
     l2_3.checkSteps[0].hint === "In 2 × 3 = 6, we doubled 3 (3 + 3 = 6).",
-  `Lesson 2 strategy check asks which number was doubled (answer: 3) with 2 groups of 3 dots and post-submission feedback "In 2 × 3 = 6, we doubled 3 (3 + 3 = 6)."`
+  `Lesson 2 strategy check asks "What number did we double to get 6 2 or 3?" (and for all other 2s facts e.g. 2 × 7 -> "What number did we double to get 14 2 or 7?") with 2 groups of n dots and post-submission feedback`
 );
 
 // Staged multi-step lessons (1, 4, 5, 8, 10, 11): visible groups total equals expectedAnswer at each staged step
@@ -625,6 +640,297 @@ assert(
     lessonEngineSrc.includes("col-start-2 row-start-2"),
   `Lesson 3 Strategy Overview displays "Multiply by 5: Count by 5s", 5-on-a-die dot groups, "3 groups" label, "Running total" row (5, 10, 15), bridge text, and staged animation`
 );
+
+// 26. Lesson 3 Checkout Gate Continue, Equation Pill Punctuation, and We Do Vertical Flow
+const formattedMathSrc = fs.readFileSync(path.join(repoRoot, "src/components/FormattedMath.tsx"), "utf8");
+assert(
+  lessonEngineSrc.includes("handleContinueFromGateFeedback") &&
+    lessonEngineSrc.includes("<span>Continue</span>") &&
+    lessonEngineSrc.includes("disabled={isAdvancing || Boolean(gateFeedback)}") &&
+    lessonEngineSrc.includes("justify-start gap-2.5") &&
+    lessonEngineSrc.includes("leading-snug break-words whitespace-normal") &&
+    formattedMathSrc.includes("\\\\.?") &&
+    formattedMathSrc.includes("seqMatch"),
+  `Checkout Gate keeps worked-example feedback visible until Continue (pausing timers and disabling keypad), equation pill removes trailing standalone period, and We Do banner/card sit in non-overlapping vertical flow`
+);
+
+// 27. Lesson 4 (×3) Overview & Check, Separate Stacked Fact Badge, Two-Row Narrow Header, and Landscape Mode Layout
+const numpadSrc = fs.readFileSync(path.join(repoRoot, "src/components/Numpad.tsx"), "utf8");
+assert(
+  lessonEngineSrc.includes("Lesson 4 · Multiply by 3") &&
+    lessonEngineSrc.includes("Double, then add one more group") &&
+    lessonEngineSrc.includes("startThreesIntroAnimation") &&
+    lessonEngineSrc.includes("flex-col sm:flex-row") &&
+    lessonEngineSrc.includes("landscape:flex-row md:flex-row") &&
+    !lessonEngineSrc.includes("max-h-[500px]") &&
+    !lessonEngineSrc.includes("max-h-[135px]") &&
+    formattedMathSrc.includes("leadingEqMatch") &&
+    formattedMathSrc.includes("leadingFactMatch") &&
+    numpadSrc.includes("landscape:flex md:flex") &&
+    l4_3x4.checkSteps[0].prompt === "3 × 4\nDouble 4. What is 4 + 4?" &&
+    l4_3x4.checkSteps[0].expectedAnswer === 8 &&
+    l4_3x4.checkSteps[0].visual.a === 2 &&
+    l4_3x4.checkSteps[0].visual.b === 4,
+  `Lesson 4 Strategy Overview & Check ("3 × 4\\nDouble 4. What is 4 + 4?"), separate stacked fact badge without period, 2-row narrow header, unclipped check cards, and iPhone/iPad landscape side-by-side layout verified`
+);
+
+// 28. Owner-Only App Analytics Tab, Server Auth Enforcement, Roster Scoping, Guest IDs, Active Time & Opened vs. Completed Levels
+{
+  // Reset mock storage for clean test isolation
+  global.localStorage.store = {};
+  if (global.document) global.document.cookie = "";
+
+  // Create registered learner A on teacher_1's roster and registered learner B on teacher_2's roster (outside teacher_1's roster)
+  const studentA = createNewStudent("RosterA_Student", "🦁", "teacher_1");
+  const studentB = createNewStudent("OutOfRosterB_Student", "🐬", "teacher_2");
+
+  // Give studentA a legacy historical attempt (without active-time or question-attempt tracking)
+  recordLessonComplete(studentA.id, {
+    lessonId: 1,
+    durationSeconds: 180,
+    accuracyPercent: 100,
+    totalQuestions: 5,
+    correctCount: 5,
+    errorFacts: [],
+    starsEarned: 3,
+    checkoutPassed: true,
+  });
+
+  // Create persistent anonymous guest in browser storage
+  const guestId1 = getOrCreateGuestLearnerId();
+  const guestId2 = getOrCreateGuestLearnerId();
+  const guestProfile = getOrCreateGuestProfile();
+  assert(
+    guestId1.startsWith("guest_") && guestId1 === guestId2 && guestProfile.accountType === "guest",
+    `Guest learner receives a persistent random browser ID (${guestId1}) without collecting personal info`
+  );
+
+  // Verify Teacher vs. Owner authentication & roster scoping
+  const teacherSession = authenticatePortalPin("2468"); // Ms. Rivera (teacher_1)
+  const ownerSession = authenticatePortalPin("1234");   // App Owner
+  assert(
+    teacherSession?.role === "teacher" &&
+      teacherSession?.teacherId === "teacher_1" &&
+      ownerSession?.role === "owner",
+    `Teacher PIN authenticates as teacher_1 while Owner PIN authenticates as owner`
+  );
+
+  const teacher1Roster = loadStudentsForTeacher("teacher", teacherSession.teacherId);
+  assert(
+    teacher1Roster.length === 1 &&
+      teacher1Roster[0].id === studentA.id &&
+      !teacher1Roster.some((s) => s.id === studentB.id) &&
+      !teacher1Roster.some((s) => s.id === guestId1),
+    `Teacher 1 sees ONLY their own roster (${studentA.id}); out-of-roster registered learner (${studentB.id}) and guest (${guestId1}) are excluded`
+  );
+
+  // Enforce owner access on the server for every analytics request
+  const teacherAnalyticsCheck = verifyOwnerAnalyticsAccess(teacherSession.token);
+  const rawTeacherPinCheck = verifyOwnerAnalyticsAccess("2468");
+  const missingTokenCheck = verifyOwnerAnalyticsAccess("");
+  const ownerAnalyticsCheck = verifyOwnerAnalyticsAccess(ownerSession.token);
+  assert(
+    !teacherAnalyticsCheck.authorized &&
+      teacherAnalyticsCheck.status === 403 &&
+      !rawTeacherPinCheck.authorized &&
+      rawTeacherPinCheck.status === 403 &&
+      !missingTokenCheck.authorized &&
+      missingTokenCheck.status === 401 &&
+      ownerAnalyticsCheck.authorized &&
+      ownerAnalyticsCheck.status === 200,
+    `Server analytics guard rejects teacher token/PIN with 403 Forbidden and missing token with 401, while authorizing owner token with 200`
+  );
+
+  // Verify ActiveLearningTimer pauses when hidden or idle >= 60s
+  let now = 1_000_000;
+  const timer = new ActiveLearningTimer(now, 60_000);
+  // 25 seconds of active interaction
+  now += 25_000;
+  timer.recordInteraction(now);
+  assert(timer.getActiveSeconds(now) === 25, `ActiveLearningTimer accrues 25s during active interaction`);
+
+  // Tab hidden in background for 10 minutes (600,000ms) -> 0 seconds added!
+  timer.setPageVisible(false, now);
+  now += 600_000;
+  assert(
+    timer.getActiveSeconds(now) === 25,
+    `Leaving a tab open in the background for 10 minutes adds 0s to active learning time (stays 25s)`
+  );
+
+  // Tab becomes visible again; learner makes 1 interaction then leaves tab idle for 5 minutes (300,000ms)
+  timer.setPageVisible(true, now);
+  now += 300_000;
+  assert(
+    timer.getActiveSeconds(now) === 85,
+    `Leaving a visible tab idle for 5 minutes caps accrual at 60s idle threshold (25s + 60s = 85s)`
+  );
+
+  // Record telemetry sessions across Student A, Out-of-Roster Student B (who completed L2 and opened L10 7s without completing), and Guest
+  const store = createEmptyAnalyticsStore();
+  const baseDate = new Date();
+  const isoNow = baseDate.toISOString();
+
+  // Out-of-roster Student B: completes Lesson 2 (×2), then opens Lesson 10 (×7) and stops at "guided"
+  applyAnalyticsEvent(store, {
+    type: "lesson_start",
+    eventId: "ev_b_l2_start",
+    sessionId: "sess_b_l2",
+    learnerId: studentB.id,
+    accountType: "registered",
+    teacherId: "teacher_2",
+    lessonId: 2,
+    stage: "strategy_intro",
+    timestamp: new Date(baseDate.getTime() - 120_000).toISOString(),
+  });
+  applyAnalyticsEvent(store, {
+    type: "answer_submitted",
+    eventId: "ev_b_l2_q1_try1",
+    sessionId: "sess_b_l2",
+    learnerId: studentB.id,
+    lessonId: 2,
+    stage: "checkout",
+    questionId: "L2-checkout-1-2x3",
+    attemptNumber: 1,
+    isCorrect: true,
+    activeDurationSeconds: 45,
+    timestamp: new Date(baseDate.getTime() - 90_000).toISOString(),
+  });
+  applyAnalyticsEvent(store, {
+    type: "lesson_complete",
+    eventId: "ev_b_l2_complete",
+    sessionId: "sess_b_l2",
+    learnerId: studentB.id,
+    lessonId: 2,
+    checkoutPassed: true,
+    activeDurationSeconds: 95,
+    timestamp: new Date(baseDate.getTime() - 80_000).toISOString(),
+  });
+  // Duplicate completion event with same or new eventId must NOT inflate active time or completions
+  applyAnalyticsEvent(store, {
+    type: "lesson_complete",
+    eventId: "ev_b_l2_complete",
+    sessionId: "sess_b_l2",
+    learnerId: studentB.id,
+    lessonId: 2,
+    checkoutPassed: true,
+    activeDurationSeconds: 95,
+    timestamp: new Date(baseDate.getTime() - 80_000).toISOString(),
+  });
+
+  // Student B opens Lesson 10 (the 7s) and reaches "guided" without completing
+  applyAnalyticsEvent(store, {
+    type: "lesson_start",
+    eventId: "ev_b_l10_start",
+    sessionId: "sess_b_l10",
+    learnerId: studentB.id,
+    accountType: "registered",
+    teacherId: "teacher_2",
+    lessonId: 10,
+    stage: "strategy_intro",
+    timestamp: new Date(baseDate.getTime() - 60_000).toISOString(),
+  });
+  applyAnalyticsEvent(store, {
+    type: "stage_change",
+    eventId: "ev_b_l10_guided",
+    sessionId: "sess_b_l10",
+    learnerId: studentB.id,
+    lessonId: 10,
+    stage: "guided",
+    activeDurationSeconds: 40,
+    timestamp: new Date(baseDate.getTime() - 30_000).toISOString(),
+  });
+  // First attempt wrong (attempt 1), retry right (attempt 2)
+  applyAnalyticsEvent(store, {
+    type: "answer_submitted",
+    eventId: "ev_b_l10_q1_try1",
+    sessionId: "sess_b_l10",
+    learnerId: studentB.id,
+    lessonId: 10,
+    stage: "guided",
+    questionId: "L10-guided-1-7x8",
+    attemptNumber: 1,
+    isCorrect: false,
+    activeDurationSeconds: 50,
+    timestamp: new Date(baseDate.getTime() - 20_000).toISOString(),
+  });
+  applyAnalyticsEvent(store, {
+    type: "answer_submitted",
+    eventId: "ev_b_l10_q1_try2",
+    sessionId: "sess_b_l10",
+    learnerId: studentB.id,
+    lessonId: 10,
+    stage: "guided",
+    questionId: "L10-guided-1-7x8",
+    attemptNumber: 2,
+    isCorrect: true,
+    activeDurationSeconds: 55,
+    timestamp: new Date(baseDate.getTime() - 10_000).toISOString(),
+  });
+
+  // Guest learner session
+  applyAnalyticsEvent(store, {
+    type: "lesson_start",
+    eventId: "ev_guest_l3_start",
+    sessionId: "sess_guest_l3",
+    learnerId: guestId1,
+    accountType: "guest",
+    lessonId: 3,
+    stage: "strategy_intro",
+    timestamp: isoNow,
+  });
+  applyAnalyticsEvent(store, {
+    type: "stage_change",
+    eventId: "ev_guest_l3_guided",
+    sessionId: "sess_guest_l3",
+    learnerId: guestId1,
+    accountType: "guest",
+    lessonId: 3,
+    stage: "guided",
+    activeDurationSeconds: 70,
+    timestamp: isoNow,
+  });
+
+  const allProfiles = [...loadAllStudents(), guestProfile];
+  const report = buildAppAnalyticsReport(store, allProfiles, "all", baseDate);
+
+  const rowA = report.learners.find((l) => l.learnerId === studentA.id);
+  const rowB = report.learners.find((l) => l.learnerId === studentB.id);
+  const rowGuest = report.learners.find((l) => l.learnerId === guestId1);
+
+  assert(
+    report.uniqueActiveLearners === 3 &&
+      report.registeredLearnersCount === 2 &&
+      report.guestLearnersCount === 1 &&
+      Boolean(rowA && rowB && rowGuest),
+    `Owner App Analytics report includes all 3 learners: teacher_1 student, out-of-roster teacher_2 student, and anonymous guest`
+  );
+
+  assert(
+    rowA.totalActiveSeconds === null &&
+      formatActiveDuration(rowA.totalActiveSeconds) === "Not tracked" &&
+      rowA.hasTrackedAttempts === false,
+    `Older historical sessions without active time or question attempt data display "Not tracked"`
+  );
+
+  assert(
+    rowB.latestLevelReached?.lessonId === 10 &&
+      rowB.latestLevelReached?.stage === "guided" &&
+      rowB.completedLessonsCount === 1 &&
+      rowB.completedLessonIds.includes(2) &&
+      !rowB.completedLessonIds.includes(10) &&
+      rowB.levelProgress.find((lp) => lp.lessonId === 10)?.opened === true &&
+      rowB.levelProgress.find((lp) => lp.lessonId === 10)?.completed === false,
+    `Learner row distinguishes latest level opened (Lesson 10 · ×7 at guided stage) from completed lessons (Lesson 2 · ×2)`
+  );
+
+  assert(
+    rowB.firstAttemptCorrect === 1 &&
+      rowB.firstAttemptTotal === 2 &&
+      rowB.retryCorrect === 1 &&
+      rowB.retryTotal === 1,
+    `First-attempt accuracy (1/2) is tracked separately from retries (1/1)`
+  );
+}
 
 console.log("\n==========================================");
 if (testFailures === 0) {

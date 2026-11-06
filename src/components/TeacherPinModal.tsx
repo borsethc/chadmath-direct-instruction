@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { Lock, X } from "lucide-react";
-import { verifyTeacherPin } from "@/lib/storage";
+import { authenticatePortalPin, setPortalSession } from "@/lib/storage";
+import { PortalAuthSession } from "@/lib/types";
 
 interface TeacherPinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (session: PortalAuthSession) => void;
 }
 
 export function TeacherPinModal({ isOpen, onClose, onSuccess }: TeacherPinModalProps) {
@@ -30,9 +31,11 @@ export function TeacherPinModal({ isOpen, onClose, onSuccess }: TeacherPinModalP
       return;
     }
 
-    if (verifyTeacherPin(enteredPin)) {
+    const session = authenticatePortalPin(enteredPin);
+    if (session) {
+      setPortalSession(session);
       setErrorMsg("");
-      onSuccess();
+      onSuccess(session);
     } else {
       setErrorMsg("Incorrect PIN. Access denied.");
       setEnteredPin("");

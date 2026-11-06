@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, ArrowRight, Play, UserPlus } from "lucide-react";
+import { Sparkles, ArrowRight, Play, UserPlus, User } from "lucide-react";
 import { StudentProfile } from "@/lib/types";
-import { createNewStudent, loadAllStudents } from "@/lib/storage";
+import { createNewStudent, getOrCreateGuestProfile, loadAllStudents } from "@/lib/storage";
 import { soundEffects } from "@/lib/sounds";
 
 interface StudentLoginProps {
@@ -33,6 +33,12 @@ export function StudentLogin({
     setIsAddingNew(false);
     setNewName("");
     onSelectStudent(created);
+  };
+
+  const handleContinueAsGuest = () => {
+    soundEffects.playKeyClick();
+    const guest = getOrCreateGuestProfile();
+    onSelectStudent(guest);
   };
 
   return (
@@ -120,13 +126,21 @@ export function StudentLogin({
               })}
             </div>
 
-            <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3">
+            <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3 flex-wrap">
               <button
                 onClick={() => onSelectStudent(allStudents[0])}
                 className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-white text-xs font-bold transition-all flex items-center gap-2 cursor-pointer"
               >
                 <Play className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Continue as {allStudents[0].name.split(" ")[0]}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleContinueAsGuest}
+                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Continue as Guest</span>
               </button>
             </div>
           </div>
@@ -138,7 +152,17 @@ export function StudentLogin({
             onSubmit={handleCreateStudent}
             className="w-full rounded-3xl bg-white/[0.03] border border-white/10 p-6 backdrop-blur-2xl shadow-2xl flex flex-col gap-4"
           >
-            <h2 className="text-lg font-black text-white">Create Student Profile</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-lg font-black text-white">Create Student Profile</h2>
+              <button
+                type="button"
+                onClick={handleContinueAsGuest}
+                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 hover:text-cyan-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <User className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Continue as Guest</span>
+              </button>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-bold text-white/70 uppercase tracking-wider">

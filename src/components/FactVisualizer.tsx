@@ -12,6 +12,7 @@ interface FactVisualizerProps {
   activeGroupIndex?: number | null; // For sequential model animation
   compact?: boolean;
   hideAdditionBar?: boolean;
+  blinkGroupsOnce?: boolean;
 }
 
 export function FactVisualizer({
@@ -21,9 +22,12 @@ export function FactVisualizer({
   activeGroupIndex = null,
   compact = false,
   hideAdditionBar = false,
+  blinkGroupsOnce,
 }: FactVisualizerProps) {
   const [viewMode, setViewMode] = useState<"groups" | "array">("groups");
   const product = factorA * factorB;
+  const shouldBlinkTwoGroups =
+    blinkGroupsOnce ?? (factorA === 2 && !showAnswer && activeGroupIndex === null);
 
   // Determine dot and grid sizing to guarantee ZERO vertical scrolling even for 5x8 and 5x9
   const isLargeCount = factorA * factorB > 25 || factorB >= 7;
@@ -32,14 +36,18 @@ export function FactVisualizer({
   return (
     <div className="w-full flex flex-col items-center gap-1.5 select-none">
       {/* View Mode Toggle & Mathematical Meaning */}
-      <div className="w-full flex items-center justify-between px-1 text-xs">
-        <div className="flex items-center gap-1.5 text-white/70 font-bold">
+      <div
+        className={`w-full flex flex-wrap items-center justify-between gap-1.5 px-1 text-xs ${
+          shouldBlinkTwoGroups ? "animate-visual-header" : ""
+        }`}
+      >
+        <div className="flex flex-wrap items-center gap-1.5 text-white/70 font-bold">
           <span className="px-2 py-0.5 rounded-md bg-sky-500/10 border border-sky-500/30 text-sky-300 font-mono font-black">
             {factorA} {factorA === 1 ? "group" : "groups"}
           </span>
           <span className="text-white/40 text-[11px]">of</span>
           <span className="px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/30 text-purple-300 font-mono font-black">
-            {factorB} {factorB === 1 ? "item" : "items"}
+            {factorB}
           </span>
         </div>
 
@@ -69,6 +77,47 @@ export function FactVisualizer({
           <div className="w-full flex flex-wrap items-center justify-center gap-1 sm:gap-2">
             {Array.from({ length: factorA }).map((_, gIdx) => {
               const isActive = activeGroupIndex === gIdx;
+              const groupBlinkClass =
+                shouldBlinkTwoGroups && gIdx === 0
+                  ? "animate-group-blink-1"
+                  : shouldBlinkTwoGroups && gIdx === 1
+                  ? "animate-group-blink-2"
+                  : "";
+
+              if (shouldBlinkTwoGroups && (gIdx === 0 || gIdx === 1)) {
+                return (
+                  <div
+                    key={`${factorA}x${factorB}-blink-${gIdx}`}
+                    className={`${groupBlinkClass} p-1.5 rounded-xl border border-cyan-400/30 bg-white/[0.03] flex flex-col items-center justify-center gap-0.5`}
+                  >
+                    <span className="text-[9px] font-black uppercase tracking-wider text-sky-300/90">
+                      G{gIdx + 1}
+                    </span>
+
+                    <div
+                      className={
+                        isFiveByLarge || factorB >= 7
+                          ? "grid grid-rows-2 grid-flow-col gap-0.5"
+                          : "flex items-center gap-0.5"
+                      }
+                    >
+                      {Array.from({ length: factorB }).map((_, dotIdx) => (
+                        <div
+                          key={dotIdx}
+                          className={`${
+                            isLargeCount
+                              ? "w-2.5 h-2.5 sm:w-3 sm:h-3 text-[6px]"
+                              : "w-3 h-3 sm:w-3.5 sm:h-3.5 text-[7px]"
+                          } rounded-full flex items-center justify-center font-black shadow-sm bg-gradient-to-br from-purple-400 to-indigo-500 text-black`}
+                        >
+                          {dotIdx + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <motion.div
                   key={gIdx}

@@ -33,8 +33,8 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
 
   return (
     <div className="w-full shrink-0 select-none">
-      {/* Mobile 2-Row Thumb Bar (< 768px with iPhone 15 safe area clearance) */}
-      <div className="block md:hidden w-full max-w-sm mx-auto px-1 py-1 pb-safe">
+      {/* Portrait Mobile 2-Row Thumb Bar (< 768px in portrait orientation) */}
+      <div className="block landscape:hidden md:hidden w-full max-w-sm mx-auto px-1 py-1 pb-safe">
         <div className="flex flex-col gap-1.5 bg-black/60 border border-white/15 p-1.5 sm:p-2 rounded-2xl backdrop-blur-2xl shadow-xl">
           {/* Row 1: 1 2 3 4 5 */}
           <div className="flex items-center justify-between gap-1 w-full">
@@ -84,9 +84,9 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
         </div>
       </div>
 
-      {/* Tablet & Desktop 3x4 Dial Grid (>= 768px) */}
-      <div className="hidden md:flex flex-col items-center gap-2.5 p-4 rounded-3xl bg-white/[0.04] border border-white/10 backdrop-blur-3xl shadow-2xl w-full max-w-[280px]">
-        <div className="grid grid-cols-3 gap-2 w-full">
+      {/* Landscape Phone, iPad & Desktop 3x4 Dial Grid (compact in phone landscape, full size on iPad/desktop) */}
+      <div className="hidden landscape:flex md:flex flex-col items-center gap-2 p-2.5 md:p-3.5 rounded-3xl bg-white/[0.04] border border-white/10 backdrop-blur-3xl shadow-2xl w-full max-w-[280px] mx-auto">
+        <div className="grid grid-cols-3 gap-1.5 md:gap-2 w-full">
           {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((key) => (
             <motion.button
               key={key}
@@ -94,7 +94,7 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
               whileTap={{ scale: 0.94 }}
               onClick={() => handleDigit(key)}
               disabled={disabled}
-              className="h-13 rounded-2xl bg-white/10 hover:bg-white/20 active:bg-cyan-500/30 text-white hover:text-cyan-300 font-black text-2xl border border-white/5 flex items-center justify-center transition-all shadow-sm disabled:opacity-30 touch-manipulation cursor-pointer"
+              className="min-h-[44px] h-11 md:h-12 rounded-2xl bg-white/10 hover:bg-white/20 active:bg-cyan-500/30 text-white hover:text-cyan-300 font-black text-xl md:text-2xl border border-white/5 flex items-center justify-center transition-all shadow-sm disabled:opacity-30 touch-manipulation cursor-pointer"
             >
               {key}
             </motion.button>
@@ -106,7 +106,7 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
             whileTap={{ scale: 0.94 }}
             onClick={handleClear}
             disabled={disabled || value.length === 0}
-            className="h-13 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white border border-white/5 font-bold text-sm flex items-center justify-center transition-colors disabled:opacity-30 touch-manipulation cursor-pointer"
+            className="min-h-[44px] h-11 md:h-12 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-white/15 text-white/50 hover:text-white border border-white/5 font-bold text-sm flex items-center justify-center transition-colors disabled:opacity-30 touch-manipulation cursor-pointer"
             title="Clear"
           >
             C
@@ -118,7 +118,7 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
             whileTap={{ scale: 0.94 }}
             onClick={() => handleDigit("0")}
             disabled={disabled}
-            className="h-13 rounded-2xl bg-white/10 hover:bg-white/20 active:bg-cyan-500/30 text-white hover:text-cyan-300 font-black text-2xl border border-white/5 flex items-center justify-center transition-all shadow-sm disabled:opacity-30 touch-manipulation cursor-pointer"
+            className="min-h-[44px] h-11 md:h-12 rounded-2xl bg-white/10 hover:bg-white/20 active:bg-cyan-500/30 text-white hover:text-cyan-300 font-black text-xl md:text-2xl border border-white/5 flex items-center justify-center transition-all shadow-sm disabled:opacity-30 touch-manipulation cursor-pointer"
           >
             0
           </motion.button>
@@ -129,7 +129,7 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
             whileTap={{ scale: 0.94 }}
             onClick={handleDelete}
             disabled={disabled || value.length === 0}
-            className="h-13 rounded-2xl bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 text-white/70 hover:text-red-400 border border-white/5 flex items-center justify-center transition-colors disabled:opacity-30 touch-manipulation cursor-pointer"
+            className="min-h-[44px] h-11 md:h-12 rounded-2xl bg-white/5 hover:bg-red-500/20 active:bg-red-500/30 text-white/70 hover:text-red-400 border border-white/5 flex items-center justify-center transition-colors disabled:opacity-30 touch-manipulation cursor-pointer"
             title="Delete"
           >
             <Delete className="w-5 h-5" />
@@ -142,7 +142,7 @@ export function Numpad({ value, onChange, onSubmit, disabled = false }: NumpadPr
           whileTap={{ scale: 0.96 }}
           onClick={onSubmit}
           disabled={disabled || value.length === 0}
-          className="w-full h-12 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-35 transition-all touch-manipulation cursor-pointer"
+          className="w-full min-h-[44px] h-11 md:h-12 rounded-2xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-35 transition-all touch-manipulation cursor-pointer"
         >
           <Check className="w-4 h-4 stroke-[3]" />
           Submit Answer

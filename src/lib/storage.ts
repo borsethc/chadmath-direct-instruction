@@ -1,8 +1,26 @@
-import type { StudentProfile, LessonAttempt, TeacherAnalytics, FactMasteryRecord } from "./types.ts";
+import type {
+  StudentProfile,
+  LessonAttempt,
+  TeacherAnalytics,
+  FactMasteryRecord,
+  PortalRole,
+  TeacherAccount,
+  PortalAuthSession,
+} from "./types.ts";
 
 const STORAGE_KEY = "chadmath_di_students_v3";
 const ACTIVE_STUDENT_KEY = "chadmath_di_active_student_v3";
 const OWNER_PIN_STORAGE_KEY = "chadmath_di_owner_teacher_pin_v1";
+const TEACHER_ACCOUNTS_STORAGE_KEY = "chadmath_di_teachers_v1";
+const PORTAL_SESSION_STORAGE_KEY = "chadmath_di_portal_session_v1";
+export const GUEST_ID_STORAGE_KEY = "chadmath_di_guest_id_v1";
+export const GUEST_PROFILE_STORAGE_KEY = "chadmath_di_guest_profile_v1";
+export const GUEST_COOKIE_KEY = "chadmath_guest_id";
+
+const DEFAULT_TEACHER_ACCOUNTS: TeacherAccount[] = [
+  { teacherId: "teacher_1", name: "Ms. Rivera (Classroom A)", pin: "2468" },
+  { teacherId: "teacher_2", name: "Mr. Davis (Classroom B)", pin: "3579" },
+];
 
 function getStorage(): Storage | null {
   if (typeof window !== "undefined" && window.localStorage) {
@@ -12,6 +30,37 @@ function getStorage(): Storage | null {
     return (globalThis as any).localStorage;
   }
   return null;
+}
+
+export function loadTeacherAccounts(): TeacherAccount[] {
+  const storage = getStorage();
+  if (!storage) return [...DEFAULT_TEACHER_ACCOUNTS];
+  try {
+    const raw = storage.getItem(TEACHER_ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [...DEFAULT_TEACHER_ACCOUNTS];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return [...DEFAULT_TEACHER_ACCOUNTS];
+  } catch {
+    return [...DEFAULT_TEACHER_ACCOUNTS];
+  }
+}
+
+export function saveTeacherAccount(account: TeacherAccount): TeacherAccount[] {
+  const accounts = loadTeacherAccounts();
+  const idx = accounts.findIndex((t) => t.teacherId === account.teacherId);
+  if (idx >= 0) {
+    accounts[idx] = account;
+  } else {
+    accounts.push(account);
+  }
+  const storage = getStorage();
+  if (storage) {
+    storage.setItem(TEACHER_ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+  }
+  return accounts;
 }
 
 // Owner-set Teacher PIN management (No hardcoded PIN, never printed in UI)
@@ -30,14 +79,165 @@ export function setTeacherPin(newPin: string): boolean {
   return true;
 }
 
-export function verifyTeacherPin(enteredPin: string): boolean {
-  const trimmed = enteredPin.trim();
+export function verifyOwnerPin(enteredPin: string): boolean {
+  const trimmed = (enteredPin || "").trim();
+  if (!trimmed) return false;
   if (trimmed === "1234") return true;
   const storage = getStorage();
   if (!storage) return false;
   const savedPin = storage.getItem(OWNER_PIN_STORAGE_KEY);
   if (!savedPin) return false;
   return savedPin.trim() === trimmed;
+}
+
+export function authenticatePortalPin(enteredPin: string): PortalAuthSession | null {
+  const trimmed = (enteredPin || "").trim();
+  if (!trimmed) return null;
+
+  if (verifyOwnerPin(trimmed)) {
+    return {
+      role: "owner",
+      teacherName: "App Owner",
+      token: `owner:${trimmed}`,
+      authenticatedAt: new Date().toISOString(),
+    };
+  }
+
+  const teachers = loadTeacherAccounts();
+  const matchedTeacher = teachers.find((t) => t.pin.trim() === trimmed);
+  if (matchedTeacher) {
+    return {
+      role: "teacher",
+      teacherId: matchedTeacher.teacherId,
+      teacherName: matchedTeacher.name,
+      token: `teacher:${matchedTeacher.teacherId}:${trimmed}`,
+      authenticatedAt: new Date().toISOString(),
+    };
+  }
+
+  return null;
+}
+
+export function verifyTeacherPin(enteredPin: string): boolean {
+  return authenticatePortalPin(enteredPin) !== null;
+}
+
+export function getPortalSession(): PortalAuthSession | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(PORTAL_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PortalAuthSession;
+  } catch {
+    return null;
+  }
+}
+
+export function setPortalSession(session: PortalAuthSession | null): void {
+  const storage = getStorage();
+  if (!storage) return;
+  if (!session) {
+    storage.removeItem(PORTAL_SESSION_STORAGE_KEY);
+  } else {
+    storage.setItem(PORTAL_SESSION_STORAGE_KEY, JSON.stringify(session));
+  }
+}
+
+export function isGuestId(learnerId: string | undefined | null): boolean {
+  return Boolean(learnerId && learnerId.startsWith("guest_"));
+}
+
+function generateRandomGuestId(): string {
+  const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+  let suffix = "";
+  if (typeof globalThis !== "undefined" && globalThis.crypto && globalThis.crypto.getRandomValues) {
+    const bytes = new Uint8Array(10);
+    globalThis.crypto.getRandomValues(bytes);
+    for (let i = 0; i < bytes.length; i++) {
+      suffix += alphabet[bytes[i] % alphabet.length];
+    }
+  } else {
+    for (let i = 0; i < 10; i++) {
+      suffix += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+  }
+  return `guest_${suffix}`;
+}
+
+export function getOrCreateGuestLearnerId(): string {
+  const storage = getStorage();
+  if (storage) {
+    const existing = storage.getItem(GUEST_ID_STORAGE_KEY);
+    if (existing && existing.startsWith("guest_")) {
+      return existing;
+    }
+  }
+  const cookieGuest = getCookie(GUEST_COOKIE_KEY);
+  if (cookieGuest && cookieGuest.startsWith("guest_")) {
+    if (storage) storage.setItem(GUEST_ID_STORAGE_KEY, cookieGuest);
+    return cookieGuest;
+  }
+  const freshId = generateRandomGuestId();
+  if (storage) {
+    storage.setItem(GUEST_ID_STORAGE_KEY, freshId);
+  }
+  setCookie(GUEST_COOKIE_KEY, freshId, 365);
+  return freshId;
+}
+
+export function loadGuestProfile(): StudentProfile | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(GUEST_PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StudentProfile;
+    if (!parsed || !parsed.id) return null;
+    return reconcileStudentMastery({ ...parsed, accountType: "guest" });
+  } catch {
+    return null;
+  }
+}
+
+export function saveGuestProfile(profile: StudentProfile): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.setItem(
+      GUEST_PROFILE_STORAGE_KEY,
+      JSON.stringify({ ...profile, accountType: "guest" })
+    );
+  } catch (err) {
+    console.error("Error saving guest profile:", err);
+  }
+}
+
+export function getOrCreateGuestProfile(): StudentProfile {
+  const guestId = getOrCreateGuestLearnerId();
+  const existing = loadGuestProfile();
+  if (existing && existing.id === guestId) {
+    return existing;
+  }
+  const guestProfile: StudentProfile = {
+    id: guestId,
+    name: "Guest Learner",
+    avatar: "👤",
+    accountType: "guest",
+    currentLessonId: 1,
+    totalMinutesPracticed: 0,
+    totalLessonsCompleted: 0,
+    totalLessonsMastered: 0,
+    streakDays: 0,
+    lastPracticeDateChicago: "",
+    xp: 0,
+    lastActive: new Date().toISOString(),
+    factMastery: generateEmptyFactMastery(),
+    lessonHistory: [],
+    reDrillQueue: [],
+  };
+  saveGuestProfile(guestProfile);
+  return guestProfile;
 }
 
 // America/Chicago calendar date helper (YYYY-MM-DD)
@@ -239,9 +439,12 @@ export function reconcileStudentMastery(student: StudentProfile): StudentProfile
 
   const totalMastered = Math.min(11, masteredLessonIds.size);
   const isAllComplete = totalMastered === 11 || currentLvl > 11;
+  const isGuest = student.accountType === "guest" || isGuestId(student.id);
 
   return {
     ...student,
+    accountType: isGuest ? "guest" : "registered",
+    teacherId: isGuest ? undefined : student.teacherId || "teacher_1",
     currentLessonId: isAllComplete ? 12 : currentLvl,
     factMastery,
     totalLessonsMastered: totalMastered,
@@ -262,12 +465,38 @@ export function loadAllStudents(): StudentProfile[] {
     }
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      return parsed.map((s) => reconcileStudentMastery(s));
+      return parsed
+        .filter((s) => s && s.accountType !== "guest" && !isGuestId(s.id))
+        .map((s) => reconcileStudentMastery(s));
     }
     return [];
   } catch {
     return [];
   }
+}
+
+export function loadStudentsForTeacher(
+  role: PortalRole = "owner",
+  teacherId?: string
+): StudentProfile[] {
+  const all = loadAllStudents();
+  if (role === "teacher") {
+    const targetTeacher = teacherId || "teacher_1";
+    return all.filter((s) => (s.teacherId || "teacher_1") === targetTeacher);
+  }
+  if (teacherId && teacherId !== "all") {
+    return all.filter((s) => (s.teacherId || "teacher_1") === teacherId);
+  }
+  return all;
+}
+
+export function assignStudentToTeacher(studentId: string, teacherId: string): StudentProfile | null {
+  const students = loadAllStudents();
+  const student = students.find((s) => s.id === studentId);
+  if (!student) return null;
+  student.teacherId = teacherId;
+  saveAllStudents(students);
+  return student;
 }
 
 export function saveAllStudents(students: StudentProfile[]): void {
@@ -281,6 +510,10 @@ export function saveAllStudents(students: StudentProfile[]): void {
 }
 
 export function revertStudentToSnapshot(snapshot: StudentProfile): void {
+  if (isGuestId(snapshot.id) || snapshot.accountType === "guest") {
+    saveGuestProfile(JSON.parse(JSON.stringify(snapshot)));
+    return;
+  }
   const students = loadAllStudents();
   const idx = students.findIndex((s) => s.id === snapshot.id);
   if (idx !== -1) {
@@ -334,16 +567,27 @@ export function setActiveStudentId(id: string): void {
 }
 
 export function getStudentById(id: string): StudentProfile | null {
+  if (isGuestId(id)) {
+    const guest = loadGuestProfile();
+    if (guest && guest.id === id) return guest;
+    return getOrCreateGuestProfile();
+  }
   const students = loadAllStudents();
   return students.find((s) => s.id === id) || null;
 }
 
-export function createNewStudent(name: string, avatar: string): StudentProfile {
+export function createNewStudent(
+  name: string,
+  avatar: string,
+  teacherId: string = "teacher_1"
+): StudentProfile {
   const students = loadAllStudents();
   const newStudent: StudentProfile = {
-    id: `student-${Date.now()}`,
+    id: `student-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     name,
     avatar,
+    accountType: "registered",
+    teacherId: teacherId || "teacher_1",
     currentLessonId: 1,
     totalMinutesPracticed: 0,
     totalLessonsCompleted: 0,
@@ -378,8 +622,11 @@ export function recordFactAnswer(
     return;
   }
 
-  const students = loadAllStudents();
-  const student = students.find((s) => s.id === studentId);
+  const isGuest = isGuestId(studentId);
+  const students = isGuest ? [] : loadAllStudents();
+  const student = isGuest
+    ? getOrCreateGuestProfile()
+    : students.find((s) => s.id === studentId);
   if (!student) return;
 
   const key1 = `${a}x${b}`;
@@ -491,7 +738,11 @@ export function recordFactAnswer(
   }
 
   student.lastActive = new Date().toISOString();
-  saveAllStudents(students);
+  if (isGuest) {
+    saveGuestProfile(student);
+  } else {
+    saveAllStudents(students);
+  }
 }
 
 // Deprecated alias for backwards-compat in existing callers
@@ -509,13 +760,16 @@ export function recordLessonComplete(
   studentId: string,
   attempt: Omit<LessonAttempt, "id" | "studentId" | "timestamp">
 ): StudentProfile | null {
-  const students = loadAllStudents();
-  const student = students.find((s) => s.id === studentId);
+  const isGuest = isGuestId(studentId);
+  const students = isGuest ? [] : loadAllStudents();
+  const student = isGuest
+    ? getOrCreateGuestProfile()
+    : students.find((s) => s.id === studentId);
   if (!student) return null;
 
   const newAttempt: LessonAttempt = {
     ...attempt,
-    id: `att-${Date.now()}`,
+    id: `att-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     studentId,
     timestamp: new Date().toISOString(),
   };
@@ -590,13 +844,20 @@ export function recordLessonComplete(
   }
 
   student.lastActive = new Date().toISOString();
-  saveAllStudents(students);
+  if (isGuest) {
+    saveGuestProfile(student);
+  } else {
+    saveAllStudents(students);
+  }
   return student;
 }
 
 export function resetStudent(studentId: string): void {
-  const students = loadAllStudents();
-  const student = students.find((s) => s.id === studentId);
+  const isGuest = isGuestId(studentId);
+  const students = isGuest ? [] : loadAllStudents();
+  const student = isGuest
+    ? loadGuestProfile()
+    : students.find((s) => s.id === studentId);
   if (!student) return;
 
   student.currentLessonId = 1;
@@ -611,12 +872,19 @@ export function resetStudent(studentId: string): void {
   student.reDrillQueue = [];
   student.lastActive = new Date().toISOString();
 
-  saveAllStudents(students);
+  if (isGuest) {
+    saveGuestProfile(student);
+  } else {
+    saveAllStudents(students);
+  }
 }
 
 export function addToReDrillQueue(studentId: string, a: number, b: number): void {
-  const students = loadAllStudents();
-  const student = students.find((s) => s.id === studentId);
+  const isGuest = isGuestId(studentId);
+  const students = isGuest ? [] : loadAllStudents();
+  const student = isGuest
+    ? getOrCreateGuestProfile()
+    : students.find((s) => s.id === studentId);
   if (!student) return;
   if (!student.reDrillQueue) student.reDrillQueue = [];
   const factKey = `${a}x${b}`;
@@ -637,23 +905,34 @@ export function addToReDrillQueue(studentId: string, a: number, b: number): void
       rec.missedDates.push(today);
     }
   }
-  saveAllStudents(students);
+  if (isGuest) {
+    saveGuestProfile(student);
+  } else {
+    saveAllStudents(students);
+  }
 }
 
 export function removeFromReDrillQueue(studentId: string, a: number, b: number): void {
-  const students = loadAllStudents();
-  const student = students.find((s) => s.id === studentId);
+  const isGuest = isGuestId(studentId);
+  const students = isGuest ? [] : loadAllStudents();
+  const student = isGuest
+    ? getOrCreateGuestProfile()
+    : students.find((s) => s.id === studentId);
   if (!student || !student.reDrillQueue) return;
   const factKey = `${a}x${b}`;
   const symmKey = `${b}x${a}`;
   student.reDrillQueue = student.reDrillQueue.filter(
     (q) => q.factKey !== factKey && q.factKey !== symmKey
   );
-  saveAllStudents(students);
+  if (isGuest) {
+    saveGuestProfile(student);
+  } else {
+    saveAllStudents(students);
+  }
 }
 
-export function computeTeacherAnalytics(): TeacherAnalytics {
-  const students = loadAllStudents();
+export function computeTeacherAnalytics(studentsOverride?: StudentProfile[]): TeacherAnalytics {
+  const students = studentsOverride || loadAllStudents();
   const formula = "First-Try Accuracy % = (Total First-Try Correct ÷ Total First-Try Attempts) × 100 [Excludes copied answers]";
 
   if (students.length === 0) {

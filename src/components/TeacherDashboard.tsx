@@ -19,41 +19,85 @@ import {
   ListRestart,
   HelpCircle,
   Play,
+  BarChart3,
 } from "lucide-react";
-import { StudentProfile, TeacherAnalytics, FactMasteryRecord } from "@/lib/types";
+import {
+  StudentProfile,
+  TeacherAnalytics,
+  FactMasteryRecord,
+  PortalAuthSession,
+} from "@/lib/types";
 import {
   computeTeacherAnalytics,
   exportClassDataCsv,
   resetStudent,
   createNewStudent,
-  loadAllStudents,
+  loadStudentsForTeacher,
+  loadTeacherAccounts,
   removeFromReDrillQueue,
 } from "@/lib/storage";
+import { AppAnalyticsPanel } from "./AppAnalyticsPanel";
 
 interface TeacherDashboardProps {
+  portalSession?: PortalAuthSession | null;
   onBackToApp: () => void;
   onSelectStudentToPlay: (student: StudentProfile) => void;
 }
 
 export function TeacherDashboard({
+  portalSession,
   onBackToApp,
   onSelectStudentToPlay,
 }: TeacherDashboardProps) {
-  const [students, setStudents] = useState<StudentProfile[]>(loadAllStudents());
-  const [analytics, setAnalytics] = useState<TeacherAnalytics>(computeTeacherAnalytics());
+  const effectiveSession: PortalAuthSession = portalSession || {
+    role: "owner",
+    teacherName: "App Owner",
+    token: "owner:1234",
+    authenticatedAt: new Date().toISOString(),
+  };
+  const isOwner = effectiveSession.role === "owner";
+
+  const [activeMainTab, setActiveMainTab] = useState<"my_students" | "app_analytics">(
+    "my_students"
+  );
+  const [teacherFilter, setTeacherFilter] = useState<string>(
+    isOwner ? "all" : effectiveSession.teacherId || "teacher_1"
+  );
+
+  const teacherAccounts = loadTeacherAccounts();
+
+  const resolveRosterStudents = (filterOverride?: string) => {
+    const activeFilter = filterOverride ?? teacherFilter;
+    if (!isOwner) {
+      return loadStudentsForTeacher("teacher", effectiveSession.teacherId);
+    }
+    return loadStudentsForTeacher("owner", activeFilter);
+  };
+
+  const [students, setStudents] = useState<StudentProfile[]>(() =>
+    resolveRosterStudents()
+  );
+  const [analytics, setAnalytics] = useState<TeacherAnalytics>(() =>
+    computeTeacherAnalytics(resolveRosterStudents())
+  );
   const [inspectingStudent, setInspectingStudent] = useState<StudentProfile | null>(null);
   const [studentDetailTab, setStudentDetailTab] = useState<"heatmap" | "redrill" | "facts">("heatmap");
   const [showAddModal, setShowAddModal] = useState(false);
   const [newStudentName, setNewStudentName] = useState("");
   const [newStudentAvatar, setNewStudentAvatar] = useState("🦁");
 
-  const refreshData = () => {
-    const updated = loadAllStudents();
+  const refreshData = (nextTeacherFilter?: string) => {
+    const updated = resolveRosterStudents(nextTeacherFilter);
     setStudents(updated);
-    setAnalytics(computeTeacherAnalytics());
+    setAnalytics(computeTeacherAnalytics(updated));
     if (inspectingStudent) {
       setInspectingStudent(updated.find((s) => s.id === inspectingStudent.id) || null);
     }
+  };
+
+  const handleTeacherFilterChange = (nextFilter: string) => {
+    setTeacherFilter(nextFilter);
+    refreshData(nextFilter);
   };
 
   const handleExportCsv = () => {
@@ -78,7 +122,12 @@ export function TeacherDashboard({
   const handleCreateStudent = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newStudentName.trim()) return;
-    createNewStudent(newStudentName.trim(), newStudentAvatar);
+    const assignedTeacher = isOwner
+      ? teacherFilter === "all"
+        ? "teacher_1"
+        : teacherFilter
+      : effectiveSession.teacherId || "teacher_1";
+    createNewStudent(newStudentName.trim(), newStudentAvatar, assignedTeacher);
     setNewStudentName("");
     setShowAddModal(false);
     refreshData();
@@ -93,36 +142,44 @@ export function TeacherDashboard({
             <GraduationCap className="w-6 h-6" />
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                Teacher Analytics
+                {isOwner && activeMainTab === "app_analytics"
+                  ? "App Analytics"
+                  : "My Students"}
               </h1>
               <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase tracking-wider">
-                Private Portal
+                {isOwner ? "Owner Portal" : effectiveSession.teacherName}
               </span>
             </div>
             <p className="text-xs sm:text-sm text-white/60">
-              Single-user private dashboard monitoring direct instruction mastery, accuracy, and re-drill queue
+              {isOwner && activeMainTab === "app_analytics"
+                ? "Owner-only analytics across all registered learners and anonymous guests"
+                : "Classroom dashboard monitoring direct instruction mastery, accuracy, and re-drill queue"}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>Add Student</span>
-          </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto flex-wrap">
+          {activeMainTab === "my_students" && (
+            <>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Add Student</span>
+              </button>
 
-          <button
-            onClick={handleExportCsv}
-            className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-          >
-            <Download className="w-4 h-4 text-emerald-400" />
-            <span>Export CSV</span>
-          </button>
+              <button
+                onClick={handleExportCsv}
+                className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Export CSV</span>
+              </button>
+            </>
+          )}
 
           <button
             onClick={onBackToApp}
@@ -132,6 +189,78 @@ export function TeacherDashboard({
           </button>
         </div>
       </div>
+
+      {/* Top-Level Navigation Tabs (My Students vs. Owner-Only App Analytics) & Teacher Roster Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div
+          className="inline-flex items-center rounded-2xl bg-white/[0.04] border border-white/10 p-1 self-start"
+          role="tablist"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeMainTab === "my_students"}
+            onClick={() => setActiveMainTab("my_students")}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+              activeMainTab === "my_students"
+                ? "bg-amber-500 text-black shadow-md shadow-amber-500/20"
+                : "text-white/70 hover:text-white"
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>My Students</span>
+          </button>
+
+          {isOwner && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeMainTab === "app_analytics"}
+              onClick={() => setActiveMainTab("app_analytics")}
+              className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
+                activeMainTab === "app_analytics"
+                  ? "bg-cyan-500 text-black shadow-md shadow-cyan-500/20"
+                  : "text-white/70 hover:text-white"
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>App Analytics</span>
+            </button>
+          )}
+        </div>
+
+        {/* Teacher-Specific Roster Filter in My Students */}
+        {activeMainTab === "my_students" && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="font-bold text-white/50 uppercase tracking-wider text-[11px]">
+              Roster Filter:
+            </span>
+            {isOwner ? (
+              <select
+                value={teacherFilter}
+                onChange={(e) => handleTeacherFilterChange(e.target.value)}
+                className="h-9 rounded-xl bg-black/60 border border-white/15 px-3 text-xs font-bold text-white outline-none focus:border-cyan-400"
+              >
+                <option value="all">All Teachers ({loadStudentsForTeacher("owner", "all").length})</option>
+                {teacherAccounts.map((t) => (
+                  <option key={t.teacherId} value={t.teacherId}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-amber-300 font-bold">
+                {effectiveSession.teacherName} ({students.length} students)
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {isOwner && activeMainTab === "app_analytics" ? (
+        <AppAnalyticsPanel portalSession={effectiveSession} />
+      ) : (
+        <>
 
       {/* Accuracy Formula Banner */}
       <div className="p-3 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-xs text-cyan-200 flex items-center justify-between flex-wrap gap-2">
@@ -646,6 +775,8 @@ export function TeacherDashboard({
             </div>
           </form>
         </div>
+      )}
+        </>
       )}
     </div>
   );

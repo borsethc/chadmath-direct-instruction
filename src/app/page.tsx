@@ -12,6 +12,7 @@ import {
   getActiveStudentId,
   setActiveStudentId,
   recordLessonComplete,
+  getStudentById,
 } from "@/lib/storage";
 
 export default function Home() {
@@ -28,7 +29,7 @@ export default function Home() {
     setStudents(loadedStudents);
 
     const savedId = getActiveStudentId();
-    const current = loadedStudents.find((s) => s.id === savedId) || null;
+    const current = savedId ? getStudentById(savedId) : null;
 
     if (current) {
       setActiveStudent(current);
@@ -124,7 +125,7 @@ export default function Home() {
               const loaded = loadAllStudents();
               setStudents(loaded);
               if (activeStudent) {
-                const refreshed = loaded.find((s) => s.id === activeStudent.id) || activeStudent;
+                const refreshed = getStudentById(activeStudent.id) || activeStudent;
                 setActiveStudent(refreshed);
               }
               setCurrentView("dashboard");

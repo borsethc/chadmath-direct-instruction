@@ -15,7 +15,7 @@ export function Navbar({
   onSwitchStudent,
 }: NavbarProps) {
   return (
-    <header className="w-full bg-[#08090f]/95 border-b border-white/10 backdrop-blur-xl px-3 sm:px-6 py-2.5 pt-safe flex items-center justify-between shrink-0 sticky top-0 z-40 select-none">
+    <header className="w-full bg-[#08090f]/95 border-b border-white/10 backdrop-blur-xl px-3 sm:px-6 px-safe py-2 sm:py-2.5 pt-safe flex items-center justify-between shrink-0 sticky top-0 z-40 select-none">
       {/* Brand Logo & Direct Instruction Tag */}
       <div
         onClick={onGoHome}

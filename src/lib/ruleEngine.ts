@@ -357,7 +357,7 @@ export function getDynamicRuleExplanation(
   if (strategy === "zero") {
     const other = factorA === 0 ? factorB : factorA;
     const checkQ = {
-      prompt: `${factorA} × ${factorB} = 0. We got 0 because there are zero groups of ${other || 5}. How many items are in 0 groups of ${other || 5}?`,
+      prompt: `${factorA} × ${factorB} = 0\nWe got 0 because there are zero groups of ${other || 5}. How many items are in 0 groups of ${other || 5}?`,
       expectedAnswer: 0,
       hint: `In ${factorA} × ${factorB} = 0, zero groups of ${other || 5} equals 0.`,
     };
@@ -394,7 +394,7 @@ export function getDynamicRuleExplanation(
     const n = factorA === 1 ? factorB : factorA;
     const isOneByOne = factorA === 1 && factorB === 1;
     const checkQ = {
-      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} from 1 group of ${n}. What number is in that 1 group?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nWe got ${product} from 1 group of ${n}. What number is in that 1 group?`,
       expectedAnswer: n,
       hint: `In ${factorA} × ${factorB} = ${product}, 1 group of ${n} equals ${n}.`,
     };
@@ -458,8 +458,9 @@ export function getDynamicRuleExplanation(
       });
     }
 
+    const choiceText = isTwoByTwo ? "1 or 2?" : `2 or ${n}?`;
     const checkQ = {
-      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by doubling a number. Which number did we double?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nWhat number did we double to get ${product} ${choiceText}`,
       expectedAnswer: n,
       hint: `In ${factorA} × ${factorB} = ${product}, we doubled ${n} (${n} + ${n} = ${product}).`,
     };
@@ -507,7 +508,7 @@ export function getDynamicRuleExplanation(
     const lastDigit = product % 10;
 
     const checkQ = {
-      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by counting by 5s (${countSequence}). How many times did we count by 5?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nWe got ${product} by counting by 5s (${countSequence}). How many times did we count by 5?`,
       expectedAnswer: n,
       hint: `In ${factorA} × ${factorB} = ${product}, we counted by 5s ${timesWords[n] || `${n} times`}: ${countSequence}.`,
     };
@@ -551,14 +552,14 @@ export function getDynamicRuleExplanation(
     const doubleVal = n * 2;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Double ${n}. What is ${n} + ${n}?`,
+      prompt: `${factorA} × ${factorB}\nDouble ${n}. What is ${n} + ${n}?`,
       expectedAnswer: doubleVal,
       hint: `Double ${n}. Two groups of ${n} make ${doubleVal} (${n} + ${n} = ${doubleVal}).`,
       visual: { a: 2, b: n },
     };
 
     const step2Check: StagedCheckStep = {
-      prompt: `Add one more group of ${n}. What is ${doubleVal} + ${n}?`,
+      prompt: `${factorA} × ${factorB}\nAdd one more group of ${n}. What is ${doubleVal} + ${n}?`,
       expectedAnswer: product,
       hint: `Add one more group of ${n}: ${doubleVal} + ${n} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
       visual: { a: 3, b: n },
@@ -603,14 +604,14 @@ export function getDynamicRuleExplanation(
     const d1 = n * 2;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Double ${n}. What is ${n} + ${n}?`,
+      prompt: `${factorA} × ${factorB}\nDouble ${n}. What is ${n} + ${n}?`,
       expectedAnswer: d1,
       hint: `Step 1: Double ${n} is ${n} + ${n} = ${d1}.`,
       visual: { a: 2, b: n },
     };
 
     const step2Check: StagedCheckStep = {
-      prompt: `Double again. What is ${d1} + ${d1}?`,
+      prompt: `${factorA} × ${factorB}\nDouble again. What is ${d1} + ${d1}?`,
       expectedAnswer: product,
       hint: `Step 2: Double again (${d1} + ${d1} = ${product}). So ${factorA} × ${factorB} = ${product}.`,
       visual: { a: 4, b: n },
@@ -655,7 +656,7 @@ export function getDynamicRuleExplanation(
     const units = 9 - tens;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is finding the tens digit (1 less than ${n}). What is ${n} - 1?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nStep 1 is finding the tens digit (1 less than ${n}). What is ${n} - 1?`,
       expectedAnswer: tens,
       hint: `In ${factorA} × ${factorB} = ${product}, ${n} minus 1 is ${tens} (and ${tens} + ${units} = 9, so ${product}!).`,
       visual: { a: 9, b: n },
@@ -705,7 +706,7 @@ export function getDynamicRuleExplanation(
             : `Equal factors form a geometric square: ${factorA} × ${factorA} = ${product}.`;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by multiplying a number by itself in a square grid. Which number did we multiply by itself?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nWe got ${product} by multiplying a number by itself in a square grid. Which number did we multiply by itself?`,
       expectedAnswer: factorA,
       hint: `In ${factorA} × ${factorB} = ${product}, we multiplied ${factorA} by itself (${factorA} × ${factorA} = ${product}).`,
       visual: { a: factorA, b: factorB },
@@ -749,14 +750,14 @@ export function getDynamicRuleExplanation(
     const fivePart = 5 * n;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Step 1 is finding 5 groups of ${n} (5 × ${n}). What is 5 × ${n}?`,
+      prompt: `${factorA} × ${factorB}\nStep 1 is finding 5 groups of ${n} (5 × ${n}). What is 5 × ${n}?`,
       expectedAnswer: fivePart,
       hint: `Step 1: 5 groups of ${n} is 5 × ${n} = ${fivePart}.`,
       visual: { a: 5, b: n },
     };
 
     const step2Check: StagedCheckStep = {
-      prompt: `Add one more group of ${n}. What is ${fivePart} + ${n}?`,
+      prompt: `${factorA} × ${factorB}\nAdd one more group of ${n}. What is ${fivePart} + ${n}?`,
       expectedAnswer: product,
       hint: `Step 2: ${fivePart} + ${n} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
       visual: { a: 6, b: n },
@@ -801,7 +802,7 @@ export function getDynamicRuleExplanation(
     const d2 = d1 * 2;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. We got ${product} by doubling a number three times (${n} → ${d1} → ${d2} → ${product}). Which number did we start with and double first?`,
+      prompt: `${factorA} × ${factorB} = ${product}\nWe got ${product} by doubling a number three times (${n} → ${d1} → ${d2} → ${product}). Which number did we start with and double first?`,
       expectedAnswer: n,
       hint: `In ${factorA} × ${factorB} = ${product}, we started with ${n} and doubled it three times: ${n} + ${n} = ${d1}, ${d1} + ${d1} = ${d2}, ${d2} + ${d2} = ${product}.`,
       visual: { a: 8, b: n },
@@ -847,21 +848,21 @@ export function getDynamicRuleExplanation(
   // 11. The Summit Fact (7 x 8 = 56) - Distinct Mnemonic Rhyme & Decomposition in Lesson 10
   if (strategy === "summit") {
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = 56. To check 7 × 8 = 56 one step at a time, split 7 into 5 + 2. First, what is 5 × 8?`,
+      prompt: `${factorA} × ${factorB}\nSplit 7 into 5 + 2. First, what is 5 × 8?`,
       expectedAnswer: 40,
       hint: "Step 1: 5 groups of 8 is 5 × 8 = 40.",
       visual: { a: 5, b: 8 },
     };
 
     const step2Check: StagedCheckStep = {
-      prompt: "Next, find 2 groups of 8 (2 × 8). What is 8 + 8?",
+      prompt: `${factorA} × ${factorB}\nNext, find 2 groups of 8 (2 × 8). What is 8 + 8?`,
       expectedAnswer: 16,
       hint: "Step 2: 2 groups of 8 is 8 + 8 = 16.",
       visual: { a: 2, b: 8 },
     };
 
     const step3Check: StagedCheckStep = {
-      prompt: "Add the 5 groups (40) and 2 groups (16). What is 40 + 16?",
+      prompt: `${factorA} × ${factorB}\nAdd the 5 groups (40) and 2 groups (16). What is 40 + 16?`,
       expectedAnswer: 56,
       hint: "40 + 16 = 56. So 7 × 8 = 56!",
       visual: { a: 7, b: 8 },
@@ -906,21 +907,21 @@ export function getDynamicRuleExplanation(
     const part2 = 2 * n;
 
     const step1Check: StagedCheckStep = {
-      prompt: `${factorA} × ${factorB} = ${product}. Split 7 into 5 + 2. First, what are 5 groups of ${n} (5 × ${n})?`,
+      prompt: `${factorA} × ${factorB}\nSplit 7 into 5 + 2. First, what are 5 groups of ${n} (5 × ${n})?`,
       expectedAnswer: part5,
       hint: `Step 1: 5 groups of ${n} is 5 × ${n} = ${part5}.`,
       visual: { a: 5, b: n },
     };
 
     const step2Check: StagedCheckStep = {
-      prompt: `Next, what are 2 groups of ${n} (${n} + ${n})?`,
+      prompt: `${factorA} × ${factorB}\nNext, what are 2 groups of ${n} (${n} + ${n})?`,
       expectedAnswer: part2,
       hint: `Step 2: 2 groups of ${n} is ${n} + ${n} = ${part2}.`,
       visual: { a: 2, b: n },
     };
 
     const step3Check: StagedCheckStep = {
-      prompt: `Add the 5 groups (${part5}) and 2 groups (${part2}). What is ${part5} + ${part2}?`,
+      prompt: `${factorA} × ${factorB}\nAdd the 5 groups (${part5}) and 2 groups (${part2}). What is ${part5} + ${part2}?`,
       expectedAnswer: product,
       hint: `${part5} + ${part2} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
       visual: { a: 7, b: n },
@@ -965,14 +966,14 @@ export function getDynamicRuleExplanation(
 
   // 13. Mixed Retrieval (Lesson 11) Overview + Staged Check for 6 × 7
   const step1Mixed: StagedCheckStep = {
-    prompt: `${factorA} × ${factorB} = ${product}. Using the 5-Group + 1 strategy for ${factorA} × ${factorB}, Step 1 is 5 × ${factorB}. What is 5 × ${factorB}?`,
+    prompt: `${factorA} × ${factorB}\nUsing the 5-Group + 1 strategy for ${factorA} × ${factorB}, Step 1 is 5 × ${factorB}. What is 5 × ${factorB}?`,
     expectedAnswer: 5 * factorB,
     hint: `Step 1: 5 groups of ${factorB} is 5 × ${factorB} = ${5 * factorB}.`,
     visual: { a: 5, b: factorB },
   };
 
   const step2Mixed: StagedCheckStep = {
-    prompt: `Add one more group of ${factorB}. What is ${5 * factorB} + ${factorB}?`,
+    prompt: `${factorA} × ${factorB}\nAdd one more group of ${factorB}. What is ${5 * factorB} + ${factorB}?`,
     expectedAnswer: product,
     hint: `${5 * factorB} + ${factorB} = ${product}. So ${factorA} × ${factorB} = ${product}.`,
     visual: { a: factorA, b: factorB },

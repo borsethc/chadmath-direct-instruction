@@ -28,3 +28,119 @@ html, body {
 .pt-safe {
   padding-top: max(8px, env(safe-area-inset-top, 14px));
 }
+.px-safe {
+  padding-left: max(12px, env(safe-area-inset-left, 12px));
+  padding-right: max(12px, env(safe-area-inset-right, 12px));
+}
+
+/* Doubling Strategy Check & Prompt Entrance + Group Blink Animations */
+@keyframes factGrowShrink {
+  0% {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+  45% {
+    opacity: 1;
+    transform: scale(1.32);
+    box-shadow: 0 0 28px rgba(168, 85, 247, 0.55), 0 0 12px rgba(56, 189, 248, 0.35);
+  }
+  70% {
+    transform: scale(1.26);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 14px rgba(168, 85, 247, 0.22);
+  }
+}
+
+@keyframes stageFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes popGroup {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes smoothSingleBlink {
+  0% {
+    transform: scale(1);
+    border-color: rgba(34, 211, 238, 0.3);
+    background-color: rgba(255, 255, 255, 0.03);
+    box-shadow: 0 0 0 rgba(34, 211, 238, 0);
+  }
+  50% {
+    transform: scale(1.1);
+    border-color: rgba(34, 211, 238, 0.95);
+    background-color: rgba(34, 211, 238, 0.18);
+    box-shadow: 0 0 20px rgba(34, 211, 238, 0.55), 0 0 10px rgba(168, 85, 247, 0.35);
+  }
+  100% {
+    transform: scale(1);
+    border-color: rgba(34, 211, 238, 0.3);
+    background-color: rgba(255, 255, 255, 0.03);
+    box-shadow: 0 0 0 rgba(34, 211, 238, 0);
+  }
+}
+
+.animate-fact-badge {
+  animation: factGrowShrink 1.05s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.animate-question-text {
+  opacity: 0;
+  animation: stageFadeUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.72s forwards;
+}
+
+.animate-visual-header {
+  opacity: 0;
+  animation: stageFadeUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) 1.05s forwards;
+}
+
+.animate-group-blink-1 {
+  opacity: 0;
+  will-change: transform, opacity, box-shadow;
+  animation:
+    popGroup 0.45s cubic-bezier(0.22, 1, 0.36, 1) 1.22s forwards,
+    smoothSingleBlink 0.8s ease-in-out 2.95s 1;
+}
+
+.animate-group-blink-2 {
+  opacity: 0;
+  will-change: transform, opacity, box-shadow;
+  animation:
+    popGroup 0.45s cubic-bezier(0.22, 1, 0.36, 1) 1.42s forwards,
+    smoothSingleBlink 0.8s ease-in-out 3.85s 1;
+}
+
+.animate-answer-box {
+  opacity: 0;
+  animation: stageFadeUp 0.42s cubic-bezier(0.22, 1, 0.36, 1) 1.62s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fact-badge,
+  .animate-question-text,
+  .animate-visual-header,
+  .animate-group-blink-1,
+  .animate-group-blink-2,
+  .animate-answer-box {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

@@ -87,6 +87,8 @@ export interface StudentProfile {
   name: string;
   avatar: string; // Emoji
   pin?: string;
+  accountType?: "registered" | "guest";
+  teacherId?: string;
   currentLessonId: number;
   totalMinutesPracticed: number;
   totalLessonsCompleted: number; // Attempted / Practised sessions
@@ -109,4 +111,140 @@ export interface TeacherAnalytics {
   strugglingFacts: { factKey: string; errorCount: number; affectedStudentsCount: number }[];
   accuracyFormula: string;
 }
+
+export type PortalRole = "owner" | "teacher";
+
+export interface TeacherAccount {
+  teacherId: string;
+  name: string;
+  pin: string;
+}
+
+export interface PortalAuthSession {
+  role: PortalRole;
+  teacherId?: string;
+  teacherName: string;
+  token: string;
+  authenticatedAt: string;
+}
+
+export type AnalyticsStage =
+  | "strategy_intro"
+  | "model"
+  | "review"
+  | "guided"
+  | "fluency"
+  | "transition_gate"
+  | "checkout"
+  | "complete";
+
+export type AnalyticsDateRange = "7d" | "30d" | "all";
+
+export interface AnalyticsQuestionAttempt {
+  eventId: string;
+  sessionId: string;
+  learnerId: string;
+  lessonId: number;
+  stage: AnalyticsStage;
+  questionId: string;
+  attemptNumber: number;
+  isCorrect: boolean;
+  timestamp: string;
+}
+
+export interface AnalyticsSessionRecord {
+  sessionId: string;
+  learnerId: string;
+  accountType: "registered" | "guest";
+  teacherId?: string;
+  lessonId: number;
+  factorLabel: string;
+  startedAt: string;
+  lastUpdatedAt: string;
+  completedAt: string | null;
+  completed: boolean;
+  checkoutPassed: boolean;
+  lastStage: AnalyticsStage;
+  stageHistory: { stage: AnalyticsStage; timestamp: string }[];
+  activeDurationSeconds: number | null;
+  attemptsTracked: boolean;
+  attempts: AnalyticsQuestionAttempt[];
+  isHistoricalBackfill?: boolean;
+}
+
+export interface LearnerLevelProgress {
+  lessonId: number;
+  lessonNumber: number;
+  title: string;
+  factorLabel: string;
+  opened: boolean;
+  completed: boolean;
+  highestStageReached: AnalyticsStage | null;
+  sessionsCount: number;
+  completedCount: number;
+  activeSeconds: number | null;
+  firstAttemptCorrect: number | null;
+  firstAttemptTotal: number | null;
+  lastActiveAt: string | null;
+}
+
+export interface LearnerAnalyticsSummary {
+  learnerId: string;
+  accountType: "registered" | "guest";
+  teacherId?: string;
+  lastActiveAt: string;
+  sessionCount: number;
+  totalActiveSeconds: number | null;
+  hasUntrackedTime: boolean;
+  latestLevelReached: {
+    lessonId: number;
+    lessonNumber: number;
+    factorLabel: string;
+    title: string;
+    stage: AnalyticsStage;
+    timestamp: string;
+  } | null;
+  completedLessonsCount: number;
+  completedLessonIds: number[];
+  firstAttemptCorrect: number;
+  firstAttemptTotal: number;
+  retryCorrect: number;
+  retryTotal: number;
+  hasTrackedAttempts: boolean;
+  recentSessions: AnalyticsSessionRecord[];
+  levelProgress: LearnerLevelProgress[];
+}
+
+export interface AppAnalyticsReport {
+  range: AnalyticsDateRange;
+  generatedAt: string;
+  uniqueActiveLearners: number;
+  registeredLearnersCount: number;
+  guestLearnersCount: number;
+  totalSessions: number;
+  medianActiveSecondsPerSession: number | null;
+  lessonsStarted: number;
+  lessonsCompleted: number;
+  completionsByLevel: {
+    lessonId: number;
+    lessonNumber: number;
+    title: string;
+    factorLabel: string;
+    startedCount: number;
+    completedCount: number;
+  }[];
+  dropoffByStage: {
+    stage: AnalyticsStage;
+    stageLabel: string;
+    count: number;
+    percentage: number;
+  }[];
+  mostCommonStopStage: {
+    stage: AnalyticsStage;
+    stageLabel: string;
+    count: number;
+  } | null;
+  learners: LearnerAnalyticsSummary[];
+}
+
 

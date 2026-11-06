@@ -33,7 +33,18 @@ import {
   renderFact,
   RenderedFactView,
 } from "@/lib/ruleEngine";
-import { recordFactAnswer, addToReDrillQueue, revertStudentToSnapshot } from "@/lib/storage";
+import {
+  recordFactAnswer,
+  addToReDrillQueue,
+  revertStudentToSnapshot,
+  getOrCreateGuestLearnerId,
+  isGuestId,
+} from "@/lib/storage";
+import {
+  ActiveLearningTimer,
+  dispatchAnalyticsEvent,
+  PERIODIC_SAVE_INTERVAL_MS,
+} from "@/lib/analytics";
 
 interface LessonEngineProps {
   lesson: DILesson;
@@ -137,11 +148,13 @@ export function LessonEngine({
   const questionStartTimeRef = useRef<number>(Date.now());
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Lesson 2 (×2) & Lesson 3 (×5) Strategy Overview Sequential Demonstration State
+  // Lesson 2 (×2), Lesson 3 (×5), & Lesson 4 (×3) Strategy Overview Sequential Demonstration State
   // Lesson 2 Stages: 0..4 (800ms intervals)
   // Lesson 3 Stages: 0 ("5 × 3") -> 1 (group 1 & running total 5) -> 2 (group 2 & running total 10) -> 3 (group 3 & running total 15) -> 4 ("5 + 5 + 5 = 15" & conclusion) -> 5 ("= 15" in main equation) (900ms intervals)
+  // Lesson 4 Stages: 0 ("3 × 4" + "Three groups of 4.") -> 1 (reveal two groups of 4 purple dots) -> 2 ("Double 4" & "4 + 4 = 8", then pause on 8) -> 3 (reveal third group of 4 dots + "Add one more group of 4" & "8 + 4 = 12") -> 4 (complete top equation "3 × 4 = 12")
   const [doubleIntroStage, setDoubleIntroStage] = useState<number>(0);
   const [fivesIntroStage, setFivesIntroStage] = useState<number>(0);
+  const [threesIntroStage, setThreesIntroStage] = useState<number>(0);
   const doubleIntroTimersRef = useRef<NodeJS.Timeout[]>([]);
 
   const clearDoubleIntroTimers = useCallback(() => {
@@ -196,12 +209,40 @@ export function LessonEngine({
     doubleIntroTimersRef.current = timers;
   }, [clearDoubleIntroTimers]);
 
+  const startThreesIntroAnimation = useCallback(() => {
+    clearDoubleIntroTimers();
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      setThreesIntroStage(4);
+      return;
+    }
+
+    setThreesIntroStage(0);
+    // Stage 1 at 800ms (2 groups of 4 dots)
+    // Stage 2 at 1600ms ("Double 4" and "4 + 4 = 8")
+    // Pause 1600ms on 8 so students clearly see the first two groups make 8 -> Stage 3 at 3200ms (3rd group + "Add one more group of 4" & "8 + 4 = 12")
+    // Stage 4 at 4100ms ("= 12" in top equation)
+    const timers: NodeJS.Timeout[] = [
+      setTimeout(() => setThreesIntroStage(1), 800),
+      setTimeout(() => setThreesIntroStage(2), 1600),
+      setTimeout(() => setThreesIntroStage(3), 3200),
+      setTimeout(() => setThreesIntroStage(4), 4100),
+    ];
+    doubleIntroTimersRef.current = timers;
+  }, [clearDoubleIntroTimers]);
+
   useEffect(() => {
-    if (phase === "strategy_intro" && (lesson.id === 2 || lesson.id === 3)) {
+    if (phase === "strategy_intro" && (lesson.id === 2 || lesson.id === 3 || lesson.id === 4)) {
       if (lesson.id === 2) {
         startDoubleIntroAnimation();
-      } else {
+      } else if (lesson.id === 3) {
         startFivesIntroAnimation();
+      } else {
+        startThreesIntroAnimation();
       }
 
       if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
@@ -211,6 +252,7 @@ export function LessonEngine({
             clearDoubleIntroTimers();
             setDoubleIntroStage(4);
             setFivesIntroStage(5);
+            setThreesIntroStage(4);
           }
         };
         mediaQuery.addEventListener?.("change", handleMotionChange);
@@ -223,7 +265,14 @@ export function LessonEngine({
     return () => {
       clearDoubleIntroTimers();
     };
-  }, [clearDoubleIntroTimers, lesson.id, phase, startDoubleIntroAnimation, startFivesIntroAnimation]);
+  }, [
+    clearDoubleIntroTimers,
+    lesson.id,
+    phase,
+    startDoubleIntroAnimation,
+    startFivesIntroAnimation,
+    startThreesIntroAnimation,
+  ]);
 
   // P0: Student Snapshot on Mount — ensures "Leave Without Saving" restores exact state
   const initialStudentSnapshotRef = useRef<StudentProfile | null>(null);
@@ -232,6 +281,146 @@ export function LessonEngine({
       initialStudentSnapshotRef.current = JSON.parse(JSON.stringify(student));
     }
   }, [student]);
+
+  // Analytics Session & Active Learning Time Tracking
+  const sessionIdRef = useRef<string>(
+    `sess_L${lesson.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  );
+  const activeTimerRef = useRef<ActiveLearningTimer>(new ActiveLearningTimer(Date.now()));
+  const lastSavedActiveSecondsRef = useRef<number>(-1);
+  const questionAttemptCountRef = useRef<Map<string, number>>(new Map());
+  const eventSeqRef = useRef<number>(0);
+
+  const resolveLearnerIdentity = useCallback(() => {
+    const learnerId = student?.id || getOrCreateGuestLearnerId();
+    const accountType: "registered" | "guest" =
+      student?.accountType === "guest" || isGuestId(learnerId) ? "guest" : "registered";
+    const teacherId = accountType === "guest" ? undefined : student?.teacherId || "teacher_1";
+    return { learnerId, accountType, teacherId };
+  }, [student]);
+
+  const nextEventId = useCallback((prefix: string) => {
+    eventSeqRef.current += 1;
+    return `${sessionIdRef.current}_${prefix}_${eventSeqRef.current}`;
+  }, []);
+
+  // Record lesson_start on mount & sync visibility / interaction / periodic active time
+  useEffect(() => {
+    const { learnerId, accountType, teacherId } = resolveLearnerIdentity();
+    const timer = activeTimerRef.current;
+
+    dispatchAnalyticsEvent({
+      type: "lesson_start",
+      eventId: `${sessionIdRef.current}_start`,
+      sessionId: sessionIdRef.current,
+      learnerId,
+      accountType,
+      teacherId,
+      lessonId: lesson.id,
+      stage: "strategy_intro",
+      timestamp: new Date().toISOString(),
+    });
+
+    const handleUserInteraction = () => {
+      timer.recordInteraction(Date.now());
+    };
+
+    const flushActiveTime = () => {
+      const activeSecs = timer.getActiveSeconds(Date.now());
+      if (activeSecs !== lastSavedActiveSecondsRef.current) {
+        lastSavedActiveSecondsRef.current = activeSecs;
+        dispatchAnalyticsEvent({
+          type: "active_time_sync",
+          eventId: nextEventId("sync"),
+          sessionId: sessionIdRef.current,
+          learnerId,
+          accountType,
+          teacherId,
+          lessonId: lesson.id,
+          activeDurationSeconds: activeSecs,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      const visible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+      timer.setPageVisible(visible, Date.now());
+      if (!visible) {
+        flushActiveTime();
+      }
+    };
+
+    window.addEventListener("pointerdown", handleUserInteraction, { passive: true });
+    window.addEventListener("keydown", handleUserInteraction, { passive: true });
+    window.addEventListener("touchstart", handleUserInteraction, { passive: true });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("pagehide", flushActiveTime);
+
+    const periodicSync = setInterval(() => {
+      flushActiveTime();
+    }, PERIODIC_SAVE_INTERVAL_MS);
+
+    return () => {
+      clearInterval(periodicSync);
+      flushActiveTime();
+      window.removeEventListener("pointerdown", handleUserInteraction);
+      window.removeEventListener("keydown", handleUserInteraction);
+      window.removeEventListener("touchstart", handleUserInteraction);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("pagehide", flushActiveTime);
+    };
+  }, [lesson.id, nextEventId, resolveLearnerIdentity]);
+
+  // Keep active timer aware of intro animations & pause state
+  useEffect(() => {
+    const isAnimPlaying =
+      phase === "strategy_intro" &&
+      ((lesson.id === 2 && doubleIntroStage < 4) ||
+        (lesson.id === 3 && fivesIntroStage < 5) ||
+        (lesson.id === 4 && threesIntroStage < 4));
+    activeTimerRef.current.setWatchingAnimation(isAnimPlaying, Date.now());
+  }, [doubleIntroStage, fivesIntroStage, lesson.id, phase, threesIntroStage]);
+
+  useEffect(() => {
+    activeTimerRef.current.setPaused(isPaused, Date.now());
+  }, [isPaused]);
+
+  // Record stage changes
+  useEffect(() => {
+    const { learnerId, accountType, teacherId } = resolveLearnerIdentity();
+    const activeSecs = activeTimerRef.current.getActiveSeconds(Date.now());
+    lastSavedActiveSecondsRef.current = activeSecs;
+
+    if (phase === "complete") {
+      activeTimerRef.current.markCompleted(Date.now());
+      dispatchAnalyticsEvent({
+        type: "lesson_complete",
+        eventId: `${sessionIdRef.current}_complete`,
+        sessionId: sessionIdRef.current,
+        learnerId,
+        accountType,
+        teacherId,
+        lessonId: lesson.id,
+        checkoutPassed: Boolean(checkoutFinalScore?.passed),
+        activeDurationSeconds: activeSecs,
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      dispatchAnalyticsEvent({
+        type: "stage_change",
+        eventId: nextEventId(`stage_${phase}`),
+        sessionId: sessionIdRef.current,
+        learnerId,
+        accountType,
+        teacherId,
+        lessonId: lesson.id,
+        stage: phase,
+        activeDurationSeconds: activeSecs,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }, [checkoutFinalScore?.passed, lesson.id, nextEventId, phase, resolveLearnerIdentity]);
 
   const handleConfirmDiscardAndExit = () => {
     if (initialStudentSnapshotRef.current) {
@@ -246,9 +435,9 @@ export function LessonEngine({
     setCheckExplanation(expl);
   }, [lesson]);
 
-  // Elapsed Practice Timer (Pausable; counts up continuously and never teleports)
+  // Elapsed Practice Timer (Pausable; pauses during Checkout Gate feedback; never teleports)
   useEffect(() => {
-    if (isPaused || phase === "complete") {
+    if (isPaused || phase === "complete" || Boolean(gateFeedback)) {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
       return;
     }
@@ -258,7 +447,7 @@ export function LessonEngine({
     return () => {
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [isPaused, phase]);
+  }, [gateFeedback, isPaused, phase]);
 
   const formatElapsed = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -387,7 +576,11 @@ export function LessonEngine({
   // Evaluate Answer Submission
   const evaluateAnswer = useCallback(
     (answerNum: number) => {
-      const responseTime = Date.now() - questionStartTimeRef.current;
+      const nowMs = Date.now();
+      activeTimerRef.current.recordInteraction(nowMs);
+      const activeSecs = activeTimerRef.current.getActiveSeconds(nowMs);
+      const { learnerId, accountType, teacherId } = resolveLearnerIdentity();
+      const responseTime = nowMs - questionStartTimeRef.current;
       setTotalAttempts((prev) => prev + 1);
 
       // Phase: "model" Check-for-Understanding Screen (Staged one step at a time!)
@@ -400,7 +593,28 @@ export function LessonEngine({
           visual: checkExplanation?.checkQuestionVisual || { a: currentFact.a, b: currentFact.b },
         };
 
-        if (answerNum === activeStep.expectedAnswer) {
+        const questionId = `L${lesson.id}-model-step-${checkStepIndex + 1}`;
+        const attemptNum = (questionAttemptCountRef.current.get(questionId) || 0) + 1;
+        questionAttemptCountRef.current.set(questionId, attemptNum);
+        const isStepCorrect = answerNum === activeStep.expectedAnswer;
+
+        dispatchAnalyticsEvent({
+          type: "answer_submitted",
+          eventId: nextEventId("ans"),
+          sessionId: sessionIdRef.current,
+          learnerId,
+          accountType,
+          teacherId,
+          lessonId: lesson.id,
+          stage: "model",
+          questionId,
+          attemptNumber: attemptNum,
+          isCorrect: isStepCorrect,
+          activeDurationSeconds: activeSecs,
+          timestamp: new Date(nowMs).toISOString(),
+        });
+
+        if (isStepCorrect) {
           soundEffects.playCorrect(1);
           setErrorMessage(null);
           setCheckFeedback(activeStep.hint || "Correct!");
@@ -427,6 +641,26 @@ export function LessonEngine({
       // Phase: "checkout" Gate
       if (phase === "checkout") {
         const isCorrect = answerNum === currentFact.product;
+        const questionId = `L${lesson.id}-checkout-${phaseStepIndex + 1}-${currentFact.a}x${currentFact.b}`;
+        const attemptNum = (questionAttemptCountRef.current.get(questionId) || 0) + 1;
+        questionAttemptCountRef.current.set(questionId, attemptNum);
+
+        dispatchAnalyticsEvent({
+          type: "answer_submitted",
+          eventId: nextEventId("ans"),
+          sessionId: sessionIdRef.current,
+          learnerId,
+          accountType,
+          teacherId,
+          lessonId: lesson.id,
+          stage: "checkout",
+          questionId,
+          attemptNumber: attemptNum,
+          isCorrect,
+          activeDurationSeconds: activeSecs,
+          timestamp: new Date(nowMs).toISOString(),
+        });
+
         const newResult: CheckoutItemResult = {
           fact: currentFact,
           answerEntered: answerNum,
@@ -465,52 +699,34 @@ export function LessonEngine({
         }
 
         // After submission in Gate, restate fact + strategy split (never product alone)
+        // Keep feedback visible until the student taps Continue!
         const renderedGateFact = renderFact(currentFact, lesson.id);
         setGateFeedback({ rendered: renderedGateFact, isCorrect });
-
-        const nextIndex = phaseStepIndex + 1;
-        setTimeout(() => {
-          setGateFeedback(null);
-          if (nextIndex < checkoutFacts.length) {
-            setPhaseStepIndex(nextIndex);
-            setCurrentFact(checkoutFacts[nextIndex]);
-            setTypedAnswer("");
-            setErrorMessage(null);
-            questionStartTimeRef.current = Date.now();
-          } else {
-            // Checkout complete! Gate pass decided by accuracy first (4+/5 or >=80%)
-            const correctNum = updatedResults.filter((r) => r.isCorrect).length;
-            const avgLatency = Math.round(
-              updatedResults.reduce((sum, r) => sum + r.latencyMs, 0) / updatedResults.length
-            );
-
-            const isMastered = correctNum >= 4; // 4/5 or 5/5
-            const speedMet = avgLatency <= 3500;
-            const stars: 1 | 2 | 3 = isMastered ? 3 : (correctNum / updatedResults.length) >= 0.75 ? 2 : 1;
-
-            setCheckoutFinalScore({
-              correct: correctNum,
-              total: updatedResults.length,
-              averageLatencyMs: avgLatency,
-              passed: isMastered,
-              speedGoalMet: speedMet,
-              starsEarned: stars,
-            });
-
-            if (isMastered) {
-              soundEffects.playFanfare();
-            } else {
-              soundEffects.playIncorrect();
-            }
-
-            setPhase("complete");
-          }
-        }, 1400);
         return;
       }
 
       // Standard Practice Phases (review, guided, fluency)
       const isCorrect = answerNum === currentFact.product;
+      const questionId = `L${lesson.id}-${phase}-${phaseStepIndex + 1}-${currentFact.a}x${currentFact.b}`;
+      const rawAttempt = (questionAttemptCountRef.current.get(questionId) || 0) + 1;
+      const attemptNum = isErrorCorrecting ? Math.max(2, rawAttempt) : rawAttempt;
+      questionAttemptCountRef.current.set(questionId, attemptNum);
+
+      dispatchAnalyticsEvent({
+        type: "answer_submitted",
+        eventId: nextEventId("ans"),
+        sessionId: sessionIdRef.current,
+        learnerId,
+        accountType,
+        teacherId,
+        lessonId: lesson.id,
+        stage: phase,
+        questionId,
+        attemptNumber: attemptNum,
+        isCorrect,
+        activeDurationSeconds: activeSecs,
+        timestamp: new Date(nowMs).toISOString(),
+      });
 
       if (isCorrect) {
         const nextStreak = currentStreak + 1;
@@ -615,8 +831,10 @@ export function LessonEngine({
       hintUsedOnCurrentFact,
       isErrorCorrecting,
       lesson.id,
+      nextEventId,
       phase,
       phaseStepIndex,
+      resolveLearnerIdentity,
       startFluencySprint,
       startGuidedPractice,
       startWarmUpPhase,
@@ -625,11 +843,53 @@ export function LessonEngine({
     ]
   );
 
+  // Advance from Checkout Gate feedback when student taps Continue
+  const handleContinueFromGateFeedback = useCallback(() => {
+    if (!gateFeedback) return;
+    setGateFeedback(null);
+    const nextIndex = phaseStepIndex + 1;
+    if (nextIndex < checkoutFacts.length) {
+      setPhaseStepIndex(nextIndex);
+      setCurrentFact(checkoutFacts[nextIndex]);
+      setTypedAnswer("");
+      setErrorMessage(null);
+      questionStartTimeRef.current = Date.now();
+    } else {
+      // Checkout complete! Gate pass decided by accuracy first (4+/5 or >=80%)
+      const totalItems = Math.max(1, checkoutResults.length);
+      const correctNum = checkoutResults.filter((r) => r.isCorrect).length;
+      const avgLatency = Math.round(
+        checkoutResults.reduce((sum, r) => sum + r.latencyMs, 0) / totalItems
+      );
+
+      const isMastered = correctNum >= 4; // 4/5 or 5/5
+      const speedMet = avgLatency <= 3500;
+      const stars: 1 | 2 | 3 = isMastered ? 3 : correctNum / totalItems >= 0.75 ? 2 : 1;
+
+      setCheckoutFinalScore({
+        correct: correctNum,
+        total: checkoutResults.length,
+        averageLatencyMs: avgLatency,
+        passed: isMastered,
+        speedGoalMet: speedMet,
+        starsEarned: stars,
+      });
+
+      if (isMastered) {
+        soundEffects.playFanfare();
+      } else {
+        soundEffects.playIncorrect();
+      }
+
+      setPhase("complete");
+    }
+  }, [checkoutFacts, checkoutResults, gateFeedback, phaseStepIndex]);
+
   // P0: Handle input changes with 400ms Visible Second-Digit Pause & Double-Tap Buffer
   const handleAnswerInput = useCallback(
     (rawVal: string) => {
-      // Ignore any taps/keys arriving during advance pause or cooldown
-      if (isAdvancingRef.current) return;
+      // Ignore any taps/keys arriving during advance pause, cooldown, or Checkout Gate feedback
+      if (isAdvancingRef.current || Boolean(gateFeedback)) return;
 
       const sanitized = rawVal.replace(/[^0-9]/g, "").slice(0, 2);
       setErrorMessage(null);
@@ -675,14 +935,14 @@ export function LessonEngine({
         }, 400);
       }
     },
-    [checkExplanation, checkStepIndex, currentFact.product, evaluateAnswer, phase]
+    [checkExplanation, checkStepIndex, currentFact.product, evaluateAnswer, gateFeedback, phase]
   );
 
   // Physical keyboard support
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (phase === "complete" || isPaused || showExitConfirm) return;
-      if (isAdvancingRef.current) {
+      if (isAdvancingRef.current || Boolean(gateFeedback)) {
         e.preventDefault();
         return;
       }
@@ -714,7 +974,7 @@ export function LessonEngine({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [evaluateAnswer, handleAnswerInput, isPaused, phase, showExitConfirm, typedAnswer]);
+  }, [evaluateAnswer, gateFeedback, handleAnswerInput, isPaused, phase, showExitConfirm, typedAnswer]);
 
   // Wrap up lesson and save attempt
   const handleFinishLesson = () => {
@@ -766,9 +1026,12 @@ export function LessonEngine({
     visual: checkExplanation?.checkQuestionVisual || { a: currentFact.a, b: currentFact.b },
   };
 
+  const hasKeypad =
+    phase !== "complete" && phase !== "strategy_intro" && phase !== "transition_gate";
+
   return (
     <div
-      className={`w-full h-[calc(100dvh-56px)] max-h-[818px] flex flex-col justify-between p-2 sm:p-3 select-none relative overflow-hidden pb-safe ${
+      className={`w-full min-h-[calc(100dvh-56px)] flex flex-col justify-start gap-2.5 p-2 sm:p-3 px-safe select-none relative overflow-y-auto overflow-x-hidden pb-safe ${
         fontSize === "large" ? "text-lg" : "text-base"
       }`}
     >
@@ -788,15 +1051,17 @@ export function LessonEngine({
         )}
       </AnimatePresence>
 
-      {/* HEADER: PROGRESS, TIMER & CONTROLS */}
-      <div className="w-full max-w-lg mx-auto flex flex-col gap-1 shrink-0 z-20">
-        <div className="flex items-center justify-between px-1">
-          {/* Phase Title Badge */}
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base sm:text-lg shrink-0">{lesson.icon}</span>
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-black text-white leading-tight break-words">{lesson.title}</span>
-              <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider">
+      {/* HEADER: PROGRESS, TIMER & CONTROLS (Normal vertical flow; full-width title row on narrow screens, wrapping controls row below) */}
+      <div className="w-full max-w-lg landscape:max-w-4xl md:max-w-4xl mx-auto flex flex-col gap-2 shrink-0 z-20">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-1">
+          {/* Row 1 on narrow screens: Full-width Lesson Title and Stage Label */}
+          <div className="w-full sm:w-auto flex items-start sm:items-center gap-2 min-w-0">
+            <span className="text-base sm:text-lg shrink-0 leading-none mt-0.5 sm:mt-0">{lesson.icon}</span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-xs sm:text-sm font-black text-white leading-snug break-words whitespace-normal">
+                {lesson.id === 4 ? "Lesson 4 · Multiply by 3" : lesson.title}
+              </span>
+              <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-wider leading-tight">
                 {phase === "strategy_intro"
                   ? "Strategy Overview"
                   : phase === "model"
@@ -816,8 +1081,8 @@ export function LessonEngine({
             </div>
           </div>
 
-          {/* Controls: Read-Aloud, Font Size, Timer, Menu */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          {/* Row 2 on narrow screens: Audio, Text, Timer, and Menu in a separate wrapping row */}
+          <div className="w-full sm:w-auto flex flex-wrap items-center justify-start sm:justify-end gap-1.5 shrink-0">
             <button
               onClick={() => {
                 if (phase === "strategy_intro") {
@@ -828,6 +1093,10 @@ export function LessonEngine({
                   } else if (lesson.id === 3) {
                     speak(
                       "Multiply by 5: Count by 5s. 5 times 3 equals 15. Count by 5s three times. 5 times 3 equals 3 times 5. We can use three groups of 5. 5, 10, 15. 5 plus 5 plus 5 equals 15. Three counts of 5 make 15."
+                    );
+                  } else if (lesson.id === 4) {
+                    speak(
+                      "Double, then add one more group. 3 times 4. Three groups of 4. Double 4: 4 plus 4 equals 8. Add one more group of 4: 8 plus 4 equals 12. 3 times 4 equals 12."
                     );
                   } else {
                     speak(checkExplanation?.strategyOverview || lesson.ruleSummary);
@@ -893,21 +1162,18 @@ export function LessonEngine({
           />
         </div>
 
-        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Check, Lesson 2/3 Strategy Intro, and bare Gate while answering) */}
-        {phase !== "model" &&
-          !(phase === "strategy_intro" && (lesson.id === 2 || lesson.id === 3)) &&
+        {/* PERSISTENT VISIBLE STRATEGY HEADER (Hidden during Strategy Intro, Check, Transition, Complete, and bare Gate while answering to prevent duplicate banners) */}
+        {phase !== "strategy_intro" &&
+          phase !== "model" &&
+          phase !== "transition_gate" &&
+          phase !== "complete" &&
           (phase !== "checkout" || Boolean(gateFeedback)) && (
-          <div className="w-full px-2.5 py-1 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
-            <span className="truncate">
+          <div className="w-full px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between text-[11px] font-bold text-cyan-200 shadow-sm shrink-0">
+            <span className="leading-snug break-words whitespace-normal">
               {phase === "review" ? (
                 <>
                   <span className="text-amber-400 uppercase font-black tracking-wider text-[10px]">Warm-Up Review: </span>
                   {currentRenderedFact.strategyName} ({currentRenderedFact.steps.map((s) => s.label).join(" → ")})
-                </>
-              ) : phase === "strategy_intro" && lesson.id === 11 ? (
-                <>
-                  <span className="text-cyan-400 uppercase font-black tracking-wider text-[10px]">Strategy: </span>
-                  {lesson.ruleName} — {lesson.ruleSummary}
                 </>
               ) : (
                 <>
@@ -920,8 +1186,16 @@ export function LessonEngine({
         )}
       </div>
 
-      {/* WORKSPACE CONTENT AREA (Optimized for iPhone 17 402x874 portrait with zero vertical scroll) */}
-      <div className="w-full max-w-lg mx-auto flex-1 flex flex-col justify-center min-h-0 py-1">
+      {/* MAIN BODY: Normal vertical flow in portrait; side-by-side 2-column layout in landscape/tablet when keypad is active */}
+      <div
+        className={`w-full ${
+          hasKeypad
+            ? "max-w-lg landscape:max-w-4xl md:max-w-4xl flex flex-col landscape:flex-row md:flex-row items-stretch landscape:items-start md:items-start justify-center gap-3 sm:gap-4"
+            : "max-w-lg landscape:max-w-2xl md:max-w-2xl flex flex-col justify-start gap-2.5"
+        } mx-auto pt-0.5`}
+      >
+      {/* WORKSPACE CONTENT AREA */}
+      <div className="w-full flex-1 min-w-0 flex flex-col justify-start gap-2.5">
         {/* PHASE 1: STRATEGY OVERVIEW */}
         {phase === "strategy_intro" && checkExplanation ? (
           lesson.id === 2 ? (
@@ -1217,11 +1491,136 @@ export function LessonEngine({
                 </button>
               </div>
             </div>
+          ) : lesson.id === 4 ? (
+            /* LESSON 4 (×3) STRATEGY OVERVIEW: "Double, then add one more group" with Staged Animation & Pause on 8 */
+            <div className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/75 border-2 border-cyan-500/40 p-3.5 sm:p-5 flex flex-col items-center gap-2.5 text-center shadow-2xl">
+              {/* 1. Teaching Card Title */}
+              <h1 className="text-base sm:text-lg font-black text-cyan-300 tracking-tight">
+                Double, then add one more group
+              </h1>
+
+              {/* 2. Main Equation "3 × 4" above "Three groups of 4." (space reserved for "= 12" until Stage 4) */}
+              <div className="flex flex-col items-center gap-0.5">
+                <div
+                  className="inline-flex items-center justify-center font-mono font-black text-4xl sm:text-5xl tracking-tight"
+                  aria-label="3 times 4 equals 12"
+                >
+                  <span className="text-sky-300">3</span>
+                  <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">×</span>
+                  <span className="text-purple-300">4</span>
+                  <span
+                    className={`inline-flex items-center transition-opacity duration-300 ${
+                      threesIntroStage >= 4 ? "opacity-100" : "opacity-0"
+                    }`}
+                  >
+                    <span className="text-slate-300 mx-2.5 text-3xl sm:text-4xl font-bold">=</span>
+                    <span className="text-amber-300">12</span>
+                  </span>
+                </div>
+
+                <p className="text-sm sm:text-base font-bold text-slate-200">
+                  <span className="text-sky-300 font-black">Three</span> groups of{" "}
+                  <span className="text-purple-300 font-mono font-black">4</span>.
+                </p>
+              </div>
+
+              {/* 3. Three Groups of Four Purple Dots (First 2 groups revealed at Stage 1, 3rd group reserved & revealed at Stage 3) */}
+              <div
+                role="img"
+                aria-label="Three groups of four purple dots. Two groups make 8, and one more group of 4 makes 12."
+                className="grid grid-cols-3 gap-2.5 sm:gap-3 w-full max-w-xs mx-auto"
+              >
+                {[1, 2, 3].map((groupIdx) => {
+                  const isVisible =
+                    groupIdx <= 2 ? threesIntroStage >= 1 : threesIntroStage >= 3;
+                  return (
+                    <div
+                      key={groupIdx}
+                      aria-hidden="true"
+                      className={`rounded-xl border border-cyan-400/40 bg-cyan-950/20 py-2.5 px-2 flex flex-col items-center justify-center gap-1.5 transition-opacity duration-300 ${
+                        isVisible ? "opacity-100" : "opacity-0"
+                      }`}
+                    >
+                      <div className="grid grid-cols-2 gap-2 p-0.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-purple-400 shadow-sm" />
+                        <span className="w-3.5 h-3.5 rounded-full bg-purple-400 shadow-sm" />
+                        <span className="w-3.5 h-3.5 rounded-full bg-purple-400 shadow-sm" />
+                        <span className="w-3.5 h-3.5 rounded-full bg-purple-400 shadow-sm" />
+                      </div>
+                      <span className="text-purple-300 font-mono font-black text-xs leading-none">
+                        4
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 4. Worked Example Steps (Space reserved so layout stays completely still) */}
+              <div className="w-full max-w-xs mx-auto flex flex-col gap-2">
+                {/* Step 1: Show "Double 4" and "4 + 4 = 8" at Stage 2, then pause so students see the first two groups make 8 */}
+                <div
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl bg-black/50 border border-white/10 transition-opacity duration-300 ${
+                    threesIntroStage >= 2 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-xs sm:text-sm font-bold text-slate-200">
+                    Double <span className="text-purple-300 font-mono font-black">4</span>
+                  </span>
+                  <span className="inline-flex items-center font-mono font-black text-base sm:text-lg">
+                    <span className="text-purple-300">4</span>
+                    <span className="text-slate-300 mx-1.5 font-bold">+</span>
+                    <span className="text-purple-300">4</span>
+                    <span className="text-slate-300 mx-1.5 font-bold">=</span>
+                    <span className="text-white">8</span>
+                  </span>
+                </div>
+
+                {/* Step 2: Show "Add one more group of 4" and "8 + 4 = 12" at Stage 3 */}
+                <div
+                  className={`flex items-center justify-between px-3 py-2 rounded-xl bg-black/50 border border-white/10 transition-opacity duration-300 ${
+                    threesIntroStage >= 3 ? "opacity-100" : "opacity-0"
+                  }`}
+                >
+                  <span className="text-xs sm:text-sm font-bold text-slate-200 text-left">
+                    Add one more group of{" "}
+                    <span className="text-purple-300 font-mono font-black">4</span>
+                  </span>
+                  <span className="inline-flex items-center font-mono font-black text-base sm:text-lg shrink-0">
+                    <span className="text-white">8</span>
+                    <span className="text-slate-300 mx-1.5 font-bold">+</span>
+                    <span className="text-purple-300">4</span>
+                    <span className="text-slate-300 mx-1.5 font-bold">=</span>
+                    <span className="text-amber-300">12</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* 5. Replay & Try One Controls (>= 44x44px touch targets) */}
+              <div className="flex items-center gap-2.5 w-full pt-0.5">
+                <button
+                  type="button"
+                  onClick={startThreesIntroAnimation}
+                  className="min-h-[44px] min-w-[44px] px-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer touch-manipulation"
+                >
+                  <RotateCcw className="w-4 h-4 text-cyan-300" />
+                  <span>Replay</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleStartModelCheck}
+                  className="flex-1 min-h-[44px] rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
+                >
+                  <span>Try One</span>
+                  <ArrowRight className="w-4 h-4 stroke-[3]" />
+                </button>
+              </div>
+            </div>
           ) : (
             <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/70 border border-white/15 p-3.5 flex flex-col gap-2.5 text-left max-h-[500px]"
+              className="w-full rounded-2xl bg-gradient-to-b from-white/[0.06] to-black/70 border border-white/15 p-3.5 flex flex-col gap-2.5 text-left"
             >
               {/* Headline Math Fact Banner */}
               <HeadlineMathFactBanner
@@ -1253,7 +1652,7 @@ export function LessonEngine({
                   {checkExplanation.steps.slice(0, 2).map((st) => (
                     <div
                       key={st.stepNumber}
-                      className="flex items-center justify-between p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
+                      className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded-lg bg-black/40 border border-white/10 text-xs"
                     >
                       <span className="font-bold text-white/80 text-[11px]">
                         Step {st.stepNumber}: {st.label}
@@ -1271,7 +1670,7 @@ export function LessonEngine({
 
               <button
                 onClick={handleStartModelCheck}
-                className="w-full h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
+                className="w-full min-h-[44px] h-11 rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer mt-1"
               >
                 <span>Continue to Check</span>
                 <ArrowRight className="w-4 h-4 stroke-[3]" />
@@ -1279,14 +1678,17 @@ export function LessonEngine({
             </motion.div>
           )
         ) : phase === "model" && checkExplanation ? (
-          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Shows ONLY the question, groups visual, and answer box until submission) */
+          /* PHASE 2: "I DO" CHECK-FOR-UNDERSTANDING (Grows naturally with content; separate blocks for prompt, group diagram, and answer field) */
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3.5 flex flex-col items-center gap-2.5 text-center my-auto"
+            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-3.5 sm:p-4 flex flex-col items-center gap-3 text-center"
           >
-            {/* 1. Product-Anchored Check Question */}
-            <div className="px-3.5 py-2.5 rounded-xl bg-purple-950/40 border border-purple-500/40 text-purple-100 text-xs sm:text-sm font-bold w-full leading-relaxed">
+            {/* 1. Fact Badge (above) & Question (below) as separate elements */}
+            <div
+              key={`check-prompt-${lesson.id}-${currentFact.a}x${currentFact.b}-${checkStepIndex}`}
+              className="px-3.5 py-3 rounded-2xl bg-purple-950/50 border-2 border-purple-500/45 text-purple-100 text-xs sm:text-sm font-bold w-full leading-relaxed shadow-inner"
+            >
               <HighlightedStrategyText
                 text={activeCheckStep.prompt}
                 factorA={currentFact.a}
@@ -1295,44 +1697,57 @@ export function LessonEngine({
               />
             </div>
 
-            {/* 2. Groups Visual (Totals exactly activeCheckStep.expectedAnswer; no addition/hint bar during the check) */}
-            <div className="w-full max-h-[135px] overflow-hidden">
+            {/* 2. Groups Visual Block (Grows with content; no clipping at larger text sizes) */}
+            <div
+              key={`check-visual-${lesson.id}-${activeCheckStep.visual.a}x${activeCheckStep.visual.b}-${checkStepIndex}`}
+              className="w-full"
+            >
               <FactVisualizer
                 factorA={activeCheckStep.visual.a}
                 factorB={activeCheckStep.visual.b}
                 showAnswer={false}
                 compact={true}
                 hideAdditionBar={true}
+                blinkGroupsOnce={activeCheckStep.visual.a === 2}
               />
             </div>
 
-            {/* 3. Answer Box */}
+            {/* 3. Answer Field & Feedback Block */}
             <div
-              className={`w-18 h-12 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl tracking-tight transition-all ${
-                errorMessage
-                  ? "bg-rose-950/70 border-rose-500 text-rose-300"
-                  : checkFeedback
-                  ? "bg-emerald-950/80 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
-                  : "bg-black/80 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
-              }`}
+              key={`check-answer-${lesson.id}-${checkStepIndex}`}
+              className="animate-answer-box w-full flex flex-col items-center gap-2 pt-0.5"
             >
-              {typedAnswer || "?"}
-            </div>
+              <div
+                className={`min-w-[4.5rem] h-12 px-4 rounded-xl border-2 flex items-center justify-center font-mono font-black text-2xl tracking-tight transition-all ${
+                  errorMessage
+                    ? "bg-rose-950/70 border-rose-500 text-rose-300"
+                    : checkFeedback
+                    ? "bg-emerald-950/80 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.4)]"
+                    : "bg-black/80 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                }`}
+              >
+                {typedAnswer || "?"}
+              </div>
 
-            {/* Post-submission feedback (shown ONLY after learner submits an answer) */}
-            {checkFeedback && (
-              <span className="text-xs text-emerald-300 font-bold px-2">{checkFeedback}</span>
-            )}
-            {errorMessage && (
-              <span className="text-xs text-rose-300 font-bold px-2">{errorMessage}</span>
-            )}
+              {/* Post-submission feedback (shown ONLY after learner submits an answer) */}
+              {checkFeedback && (
+                <span className="text-xs sm:text-sm text-emerald-300 font-bold px-2 leading-snug">
+                  {checkFeedback}
+                </span>
+              )}
+              {errorMessage && (
+                <span className="text-xs sm:text-sm text-rose-300 font-bold px-2 leading-snug">
+                  {errorMessage}
+                </span>
+              )}
+            </div>
           </motion.div>
         ) : phase === "transition_gate" ? (
           /* TRANSITION SCREEN BEFORE CHECKOUT GATE */
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full rounded-2xl bg-gradient-to-b from-rose-950/40 to-black/60 border-2 border-rose-500/40 p-5 flex flex-col items-center gap-3 text-center my-auto"
+            className="w-full rounded-2xl bg-gradient-to-b from-rose-950/40 to-black/60 border-2 border-rose-500/40 p-5 flex flex-col items-center gap-3 text-center"
           >
             <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
               <Target className="w-6 h-6" />
@@ -1361,7 +1776,7 @@ export function LessonEngine({
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-4 flex flex-col items-center text-center gap-3 my-auto"
+            className="w-full rounded-2xl bg-white/[0.04] border border-white/15 p-4 flex flex-col items-center text-center gap-3"
           >
             {checkoutFinalScore?.passed ? (
               <>
@@ -1467,10 +1882,10 @@ export function LessonEngine({
           </motion.div>
         ) : (
           /* STANDARD LESSON DRILL: REVIEW (WARM-UP), GUIDED (WE DO), FLUENCY, OR CHECKOUT */
-          <div className="w-full flex flex-col items-center gap-1.5 my-auto">
+          <div className="w-full flex flex-col items-center gap-2.5">
             {/* In Checkout Gate, show explicit pass rule and label repeats */}
             {phase === "checkout" && (
-              <div className="flex items-center justify-between w-full px-2 text-[10px] text-amber-300/90 font-bold">
+              <div className="flex flex-wrap items-center justify-between gap-1.5 w-full px-2 text-[10px] text-amber-300/90 font-bold">
                 <span>Pass Rule: 4+ of 5 correct (80%+)</span>
                 {checkoutFacts
                   .slice(0, phaseStepIndex)
@@ -1508,7 +1923,7 @@ export function LessonEngine({
 
             {/* In "Fluency", show THAT fact's strategy name and toggleable Strategy Hint */}
             {phase === "fluency" && (
-              <div className="flex items-center gap-2 text-[11px] text-white/60">
+              <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] text-white/60">
                 <span className="font-bold text-amber-300">{currentRenderedFact.strategyName}</span>
                 <button
                   onClick={() => {
@@ -1546,16 +1961,26 @@ export function LessonEngine({
               />
             )}
 
-            {/* Gate Post-Submission Feedback Banner: Restates fact + strategy split AFTER submission */}
+            {/* Gate Post-Submission Feedback Banner: Restates fact + strategy split AFTER submission and stays visible until Continue */}
             {phase === "checkout" && gateFeedback && (
-              <HeadlineMathFactBanner
-                a={gateFeedback.rendered.groups}
-                b={gateFeedback.rendered.perGroup}
-                product={gateFeedback.rendered.product}
-                label={gateFeedback.isCorrect ? "Gate Feedback — Correct!" : "Gate Feedback — Strategy Review"}
-                strategyName={gateFeedback.rendered.strategyName}
-                steps={gateFeedback.rendered.steps}
-              />
+              <div className="w-full flex flex-col items-center gap-2.5">
+                <HeadlineMathFactBanner
+                  a={gateFeedback.rendered.groups}
+                  b={gateFeedback.rendered.perGroup}
+                  product={gateFeedback.rendered.product}
+                  label={gateFeedback.isCorrect ? "Gate Feedback — Correct!" : "Gate Feedback — Strategy Review"}
+                  strategyName={gateFeedback.rendered.strategyName}
+                  steps={gateFeedback.rendered.steps}
+                />
+                <button
+                  type="button"
+                  onClick={handleContinueFromGateFeedback}
+                  className="w-full min-h-[44px] rounded-xl bg-gradient-to-r from-cyan-400 to-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer touch-manipulation"
+                >
+                  <span>Continue</span>
+                  <ArrowRight className="w-4 h-4 stroke-[3]" />
+                </button>
+              </div>
             )}
 
             {/* Math Problem Numerals with High-Contrast Factor Color Reinforcement */}
@@ -1593,14 +2018,9 @@ export function LessonEngine({
               </div>
             </div>
 
-            {/* Scaffold Visualizer: Faded according to Direct Instruction rules
-                - Review (Warmup): full dots + repeated addition
-                - Guided: full groups
-                - Fluency: dots hidden (unless user requests hint)
-                - Checkout: bare problems (no groups)
-            */}
+            {/* Scaffold Visualizer: Grows naturally without clipping */}
             {phase !== "checkout" && (phase !== "fluency" || showHintScaffold) && (
-              <div className="w-full max-h-[125px] overflow-hidden">
+              <div className="w-full">
                 <FactVisualizer
                   factorA={currentFact.a}
                   factorB={currentFact.b}
@@ -1613,15 +2033,15 @@ export function LessonEngine({
         )}
       </div>
 
-      {/* NUMPAD: Pinned at bottom with 44pt tap targets & disabled state during 400ms pause */}
-      {phase !== "complete" && phase !== "strategy_intro" && phase !== "transition_gate" && (
-        <div className="w-full max-w-sm mx-auto shrink-0 pb-1">
+      {/* NUMPAD: Separate block; side-by-side right column in landscape/tablet, bottom bar in portrait mobile */}
+      {hasKeypad && (
+        <div className="w-full max-w-sm landscape:w-64 md:w-72 mx-auto landscape:mx-0 md:mx-0 shrink-0 pb-1">
           <Numpad
             value={typedAnswer}
             onChange={handleAnswerInput}
-            disabled={isAdvancing}
+            disabled={isAdvancing || Boolean(gateFeedback)}
             onSubmit={() => {
-              if (typedAnswer.length > 0 && !isAdvancingRef.current) {
+              if (typedAnswer.length > 0 && !isAdvancingRef.current && !gateFeedback) {
                 const num = parseInt(typedAnswer, 10);
                 isAdvancingRef.current = true;
                 setIsAdvancing(true);
@@ -1637,6 +2057,7 @@ export function LessonEngine({
           />
         </div>
       )}
+      </div>
 
       {/* PAUSE MODAL */}
       {isPaused && (
